@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forest Defender - Enhanced</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden; height: 100%;
+    font-family: Arial, sans-serif; background: #000;
+  }
+  #gameCanvas {
+    display: block;
+    position: fixed;
+    top: 0; left: 0;
+  }
+  #ui {
+    position: fixed;
+    top: 10px; left: 10px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 10;
+    user-select: none;
+  }
+  #inventory, #crafting {
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: rgba(30, 30, 30, 0.95);
+    color: white;
+    border-radius: 12px;
+    padding: 20px;
+    z-index: 20;
+    box-shadow: 0 0 20px rgba(0,0,0,0.7);
+  }
+  #inventory h2, #crafting h2 {
+    margin-top: 0;
+    text-align: center;
+  }
+  .inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 60px);
+    grid-auto-rows: 60px;
+    gap: 10px;
+    justify-content: center;
+  }
+  .slot {
+    border: 2px solid #555;
+    border-radius: 8px;
+    background: #222;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  #miningBar {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 25px;
+    background: #555;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(0,0,0,0.7);
+    z-index: 15;
+    display: none;
+  }
+  #miningProgress {
+    height: 100%;
+    background: linear-gradient(90deg, #228B22, #7CFC00);
+    width: 0%;
+    border-radius: 12px;
+  }
+  .craft-button {
+    display: block;
+    margin: 10px auto;
+    background: #3a7;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #fff;
+  }
+  .craft-button:disabled {
+    background: #555;
+    cursor: not-allowed;
+  }
+  .craft-item {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #555;
+  }
+  /* Start and End Screen Styles */
+  #startScreen, #endScreen {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    color: white;
+    text-align: center;
+  }
+  #endScreen {
+    display: none;
+  }
+  .screen-title {
+    font-size: 48px;
+    margin-bottom: 20px;
+    color: #7ec850;
+    text-shadow: 0 0 10px rgba(126, 200, 80, 0.7);
+  }
+  .screen-subtitle {
+    font-size: 24px;
+    margin-bottom: 40px;
+    max-width: 600px;
+    line-height: 1.5;
+  }
+  .screen-button {
+    background: #3a7;
+    border: none;
+    padding: 15px 40px;
+    font-size: 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #fff;
+    transition: all 0.3s;
+    margin: 10px;
+  }
+  .screen-button:hover {
+    background: #4b9;
+    transform: scale(1.05);
+  }
+  .stats-container {
+    background: rgba(0, 0, 0, 0.7);
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    width: 300px;
+  }
+  .stat-line {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+  }
+  /* Manual Modal */
+  #manualModal {
+    display: none;
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: rgba(30, 30, 30, 0.95);
+    color: white;
+    border-radius: 12px;
+    padding: 30px;
+    z-index: 200;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+  }
+  #manualModal h2 {
+    color: #7ec850;
+    text-align: center;
+    margin-top: 0;
+  }
+  .manual-section {
+    margin-bottom: 25px;
+  }
+  .manual-section h3 {
+    color: #5a9;
+    border-bottom: 1px solid #5a9;
+    padding-bottom: 5px;
+  }
+  .close-modal {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: #a55;
+    border: none;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+  }
+  .crafting-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+  }
+  @media (max-width: 700px) {
+    .crafting-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+  <div>Bottles: <span id="bottleCount">0</span></div>
+  <div>Cans: <span id="canCount">0</span></div>
+  <div>Swords: <span id="swordCount">0</span></div>
+  <div>Health: <span id="playerHealth">100</span></div>
+  <div>Woodcutters defeated: <span id="creaturesDefeated">0</span></div>
+  <div>Trees remaining: <span id="treesRemaining">5</span></div>
+  <div>Night Level: <span id="nightLevel">1</span></div>
+  <div>Time: <span id="timeOfDay">Day</span></div>
+  <div><small>Press 'E' Inventory, 'C' Crafting, Spacebar to collect/attack</small></div>
+</div>
+<div id="inventory" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="inventoryTitle">
+  <h2 id="inventoryTitle">Inventory</h2>
+  <div class="inventory-grid" id="inventoryGrid"></div>
+</div>
+<div id="crafting" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="craftingTitle">
+  <h2 id="craftingTitle">Crafting</h2>
+  <div class="crafting-grid" id="craftingGrid"></div>
+</div>
+<div id="miningBar">
+  <div id="miningProgress"></div>
+</div>
+<!-- Start Screen -->
+<div id="startScreen">
+  <h1 class="screen-title">Forest Defender</h1>
+  <p class="screen-subtitle">Protect the ancient trees from woodcutters. Collect resources, craft allies, and survive as long as you can!</p>
+  <button id="startButton" class="screen-button">Start Game</button>
+  <button id="manualButton" class="screen-button">Manual & How to Play</button>
+</div>
+<!-- End Screen -->
+<div id="endScreen">
+  <h1 class="screen-title">Game Over</h1>
+  <div class="stats-container">
+    <div class="stat-line"><span>Night Level Reached:</span> <span id="finalNightLevel">1</span></div>
+    <div class="stat-line"><span>Woodcutters Defeated:</span> <span id="finalCreaturesDefeated">0</span></div>
+    <div class="stat-line"><span>Resources Collected:</span> <span id="finalResources">0</span></div>
+    <div class="stat-line"><span>Allies Created:</span> <span id="finalAllies">0</span></div>
+  </div>
+  <button id="restartButton" class="screen-button">Play Again</button>
+</div>
+<!-- Manual Modal -->
+<div id="manualModal">
+  <button class="close-modal" id="closeManual">X</button>
+  <h2>Forest Defender - Game Manual</h2>
+  
+  <div class="manual-section">
+    <h3>Movement Controls</h3>
+    <p>Use <strong>WASD</strong> or <strong>Arrow Keys</strong> to move your character around the forest.</p>
+  </div>
+  
+  <div class="manual-section">
+    <h3>Collecting Resources</h3>
+    <p>Approach resources and press <strong>SPACEBAR</strong> to collect them:</p>
+    <ul>
+      <li><strong>Plastic Bottles</strong> (Blue): Used for crafting various items</li>
+      <li><strong>Tin Cans</strong> (Silver): Used for crafting weapons and defenses</li>
+    </ul>
+    <p>Collecting Gloves will speed up your collection process.</p>
+  </div>
+  
+  <div class="manual-section">
+    <h3>Crafting System</h3>
+    <p>Press <strong>C</strong> to open the crafting menu. Here you can create:</p>
+    <ul>
+      <li><strong>Weapons</strong> like Swords to fight woodcutters</li>
+      <li><strong>Allies</strong> like Eco Defenders and Forest Rangers to help you</li>
+      <li><strong>Tools</strong> like Collecting Gloves to gather resources faster</li>
+      <li><strong>Defenses</strong> like Barricades to protect trees</li>
+      <li><strong>Special Items</strong> with unique abilities</li>
+    </ul>
+  </div>
+  
+  <div class="manual-section">
+    <h3>Combat</h3>
+    <p>Equip a weapon and press <strong>SPACEBAR</strong> near woodcutters to attack them.</p>
+    <p>Different woodcutters have different strengths and weaknesses:</p>
+    <ul>
+      <li><strong>Basic Woodcutter</strong>: Standard enemy with axe</li>
+      <li><strong>Giant Woodcutter</strong>: Larger, more health, deals more damage</li>
+      <li><strong>Boss Woodcutter</strong>: Very powerful, appears in later nights</li>
+      <li><strong>Specialized Woodcutters</strong>: 27 additional types with unique abilities</li>
+    </ul>
+  </div>
+  
+  <div class="manual-section">
+    <h3>Day/Night Cycle</h3>
+    <p>During the <strong>day</strong>, collect resources and prepare your defenses.</p>
+    <p>During the <strong>night</strong>, woodcutters will appear and try to cut down your trees.</p>
+    <p>Each night gets progressively harder with more and stronger woodcutters.</p>
+  </div>
+  
+  <div class="manual-section">
+    <h3>Victory Conditions</h3>
+    <p>Protect the ancient trees for as many nights as possible.</p>
+    <p>The game ends when all trees are destroyed.</p>
+  </div>
+  
+  <div class="manual-section">
+    <h3>Tips for Success</h3>
+    <ul>
+      <li>Focus on collecting resources during the day</li>
+      <li>Create a balanced mix of allies and defenses</li>
+      <li>Upgrade your equipment as you progress</li>
+      <li>Protect the trees at all costs!</li>
+    </ul>
+  </div>
+</div>
+<script>
+// Game constants and variables
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const bottleCounter = document.getElementById('bottleCount');
+const canCounter = document.getElementById('canCount');
+const swordCountUI = document.getElementById('swordCount');
+const playerHealthCounter = document.getElementById('playerHealth');
+const creaturesDefeatedCounter = document.getElementById('creaturesDefeated');
+const treesRemainingCounter = document.getElementById('treesRemaining');
+const nightLevelDisplay = document.getElementById('nightLevel');
+const timeOfDayDisplay = document.getElementById('timeOfDay');
+const inventory = document.getElementById('inventory');
+const inventoryGrid = document.getElementById('inventoryGrid');
+const craftingMenu = document.getElementById('crafting');
+const craftingGrid = document.getElementById('craftingGrid');
+const miningBar = document.getElementById('miningBar');
+const miningProgress = document.getElementById('miningProgress');
+const startScreen = document.getElementById('startScreen');
+const endScreen = document.getElementById('endScreen');
+const startButton = document.getElementById('startButton');
+const restartButton = document.getElementById('restartButton');
+const finalNightLevel = document.getElementById('finalNightLevel');
+const finalCreaturesDefeated = document.getElementById('finalCreaturesDefeated');
+const finalResources = document.getElementById('finalResources');
+const finalAllies = document.getElementById('finalAllies');
+const manualButton = document.getElementById('manualButton');
+const manualModal = document.getElementById('manualModal');
+const closeManual = document.getElementById('closeManual');
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const WORLD_WIDTH = 2000;
+const WORLD_HEIGHT = 2000;
+
+const game = {
+  bottles: 0,
+  cans: 0,
+  swordCount: 0,
+  creaturesDefeated: 0,
+  player: { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 + 100, size: 20, speed: 5, health: 100, maxHealth: 100, swordCooldown: 0 },
+  trees: [],
+  creatures: [],
+  natureGoblins: [],
+  soldiers: [],
+  resources: [],
+  keysPressed: {},
+  time: 0,
+  dayLength: 120,
+  isNight: false,
+  inventoryOpen: false,
+  craftingOpen: false,
+  spacePressed: false,
+  miningTarget: null,
+  miningTime: 0,
+  miningDuration: 3,
+  nightLevel: 1,
+  equippedItem: null,
+  hasGloves: false,
+  gameStarted: false,
+  gameOver: false,
+  // New inventory items
+  barricades: 0,
+  potions: 0,
+  traps: 0,
+  upgrades: 0
+};
+
+const INVENTORY_SLOTS = 20;
+
+// Expanded crafting recipes
+const craftingRecipes = [
+  { id: 'goblin', name: 'Eco Defender', cost: { bottles: 3, cans: 2 }, description: 'Basic defender that attacks woodcutters' },
+  { id: 'sword', name: 'Sword', cost: { cans: 2, bottles: 1 }, description: 'Basic weapon for attacking woodcutters' },
+  { id: 'gloves', name: 'Collecting Gloves', cost: { bottles: 2, cans: 1 }, description: 'Increases collection speed by 30%' },
+  { id: 'soldier', name: 'Forest Ranger', cost: { bottles: 3, cans: 3 }, description: 'Stronger defender with more health and damage' },
+  { id: 'barricade', name: 'Wooden Barricade', cost: { bottles: 5, cans: 2 }, description: 'Slows down woodcutters near trees' },
+  { id: 'potion', name: 'Healing Potion', cost: { bottles: 2, cans: 3 }, description: 'Restores 25 health when used' },
+  { id: 'trap', name: 'Bear Trap', cost: { bottles: 1, cans: 4 }, description: 'Immobilizes woodcutters for a short time' },
+  { id: 'upgrade', name: 'Tool Upgrade', cost: { bottles: 10, cans: 10 }, description: 'Permanently increases collection speed by 10%' },
+  { id: 'super_sword', name: 'Reinforced Sword', cost: { bottles: 5, cans: 8 }, description: 'Deals 50% more damage than regular sword' },
+  { id: 'armor', name: 'Recycled Armor', cost: { bottles: 8, cans: 6 }, description: 'Reduces damage taken by 30%' },
+  { id: 'binoculars', name: 'Recycled Binoculars', cost: { bottles: 4, cans: 3 }, description: 'Increases view distance by 20%' },
+  { id: 'boots', name: 'Sturdy Boots', cost: { bottles: 3, cans: 5 }, description: 'Increases movement speed by 15%' },
+  { id: 'fire', name: 'Campfire', cost: { bottles: 6, cans: 4 }, description: 'Scares away weaker woodcutters at night' },
+  { id: 'fence', name: 'Reinforced Fence', cost: { bottles: 4, cans: 7 }, description: 'Stronger barrier that lasts longer' },
+  { id: 'horn', name: 'Warning Horn', cost: { bottles: 3, cans: 2 }, description: 'Attracts allies to your position when used' },
+  { id: 'sprinkler', name: 'Water Sprinkler', cost: { bottles: 8, cans: 5 }, description: 'Waters trees, gradually restoring their health' },
+  { id: 'compost', name: 'Super Compost', cost: { bottles: 5, cans: 3 }, description: 'Fertilizes trees, increasing their max health' },
+  { id: 'sling', name: 'Slingshot', cost: { bottles: 2, cans: 1 }, description: 'Ranged weapon with low damage but safe distance' },
+  { id: 'lure', name: 'Woodcutter Lure', cost: { bottles: 4, cans: 2 }, description: 'Diverts woodcutters away from trees' },
+  { id: 'flare', name: 'Signal Flare', cost: { bottles: 3, cans: 4 }, description: 'Reveals all woodcutters on the map for 10 seconds' },
+  { id: 'backpack', name: 'Expanded Backpack', cost: { bottles: 6, cans: 4 }, description: 'Increases inventory capacity by 5 slots' },
+  { id: 'shelter', name: 'Emergency Shelter', cost: { bottles: 10, cans: 8 }, description: 'Provides safe healing spot during night' },
+  { id: 'beacon', name: 'Guiding Beacon', cost: { bottles: 5, cans: 7 }, description: 'Increases ally movement speed within range' },
+  { id: 'scarecrow', name: 'Scarecrow', cost: { bottles: 4, cans: 3 }, description: 'Frightens basic woodcutters away from area' },
+  { id: 'fertilizer', name: 'Growth Fertilizer', cost: { bottles: 7, cans: 2 }, description: 'Speeds up resource regeneration' },
+  { id: 'map', name: 'Treasure Map', cost: { bottles: 3, cans: 5 }, description: 'Reveals locations of rare resources' },
+  { id: 'whistle', name: 'Dog Whistle', cost: { bottles: 2, cans: 4 }, description: 'Summons a forest dog to help you' },
+  { id: 'lantern', name: 'Solar Lantern', cost: { bottles: 5, cans: 3 }, description: 'Extends daytime by 10%' },
+  { id: 'hammer', name: 'Reinforced Hammer', cost: { bottles: 4, cans: 6 }, description: 'Allies with hammers deal more damage to barriers' },
+  { id: 'net', name: 'Butterfly Net', cost: { bottles: 2, cans: 1 }, description: 'Catches rare insects that can be used for potions' },
+  { id: 'book', name: 'Survival Guide', cost: { bottles: 6, cans: 2 }, description: 'Permanently increases all crafting efficiency by 15%' },
+  { id: 'rope', name: 'Climbing Rope', cost: { bottles: 3, cans: 2 }, description: 'Allows access to previously unreachable areas' },
+  { id: 'canteen', name: 'Water Canteen', cost: { bottles: 1, cans: 3 }, description: 'Provides hydration, increasing stamina recovery' },
+  { id: 'hat', name: 'Sun Hat', cost: { bottles: 2, cans: 1 }, description: 'Reduces sun effect, allowing longer daytime activities' },
+  { id: ' compass', name: 'Navigation Compass', cost: { bottles: 3, cans: 4 }, description: 'Prevents getting lost, shows direction to trees' }
+];
+
+// Woodcutter types
+const woodcutterTypes = [
+  { name: "Basic Woodcutter", health: 3, damage: 5, speed: 1.2, size: 25, color: "#8B4513", nightMin: 1 },
+  { name: "Giant Woodcutter", health: 8, damage: 8, speed: 0.9, size: 35, color: "#654321", nightMin: 2 },
+  { name: "Boss Woodcutter", health: 20, damage: 12, speed: 1.0, size: 45, color: "#422018", nightMin: 5 },
+  { name: "Swift Woodcutter", health: 4, damage: 4, speed: 2.0, size: 22, color: "#A52A2A", nightMin: 3 },
+  { name: "Armored Woodcutter", health: 12, damage: 6, speed: 0.8, size: 30, color: "#36454F", nightMin: 4 },
+  { name: "Stealth Woodcutter", health: 5, damage: 7, speed: 1.5, size: 20, color: "#2F4F4F", nightMin: 3 },
+  { name: "Elite Woodcutter", health: 10, damage: 9, speed: 1.3, size: 28, color: "#800020", nightMin: 6 },
+  { name: "Brute Woodcutter", health: 15, damage: 10, speed: 1.1, size: 38, color: "#5D4037", nightMin: 7 },
+  { name: "Champion Woodcutter", health: 25, damage: 15, speed: 1.4, size: 40, color: "#D4AF37", nightMin: 10 },
+  { name: "Ninja Woodcutter", health: 7, damage: 8, speed: 2.2, size: 23, color: "#191970", nightMin: 4 },
+  { name: "Berserker Woodcutter", health: 9, damage: 12, speed: 1.6, size: 32, color: "#8B0000", nightMin: 5 },
+  { name: "Toxic Woodcutter", health: 6, damage: 5, speed: 1.0, size: 26, color: "#556B2F", nightMin: 3, special: "poison" },
+  { name: "Fire Woodcutter", health: 8, damage: 7, speed: 1.2, size: 28, color: "#B22222", nightMin: 4, special: "fire" },
+  { name: "Ice Woodcutter", health: 7, damage: 6, speed: 0.9, size: 27, color: "#4682B4", nightMin: 4, special: "ice" },
+  { name: "Electric Woodcutter", health: 5, damage: 8, speed: 1.8, size: 24, color: "#FFD700", nightMin: 5, special: "electric" },
+  { name: "Earth Woodcutter", health: 14, damage: 7, speed: 0.7, size: 36, color: "#8B4513", nightMin: 6, special: "earth" },
+  { name: "Wind Woodcutter", health: 4, damage: 5, speed: 2.5, size: 21, color: "#F5F5DC", nightMin: 4, special: "wind" },
+  { name: "Water Woodcutter", health: 9, damage: 6, speed: 1.3, size: 29, color: "#1E90FF", nightMin: 5, special: "water" },
+  { name: "Light Woodcutter", health: 6, damage: 9, speed: 1.7, size: 25, color: "#FFFAF0", nightMin: 6, special: "light" },
+  { name: "Dark Woodcutter", health: 11, damage: 10, speed: 1.4, size: 33, color: "#2F4F4F", nightMin: 7, special: "dark" },
+  { name: "Mechanized Woodcutter", health: 16, damage: 11, speed: 1.0, size: 37, color: "#708090", nightMin: 8, special: "machine" },
+  { name: "Undead Woodcutter", health: 12, damage: 8, speed: 1.1, size: 31, color: "#2F4F4F", nightMin: 7, special: "undead" },
+  { name: "Mutated Woodcutter", health: 18, damage: 13, speed: 1.2, size: 39, color: "#32CD32", nightMin: 9, special: "mutant" },
+  { name: "Royal Woodcutter", health: 22, damage: 14, speed: 1.3, size: 41, color: "#DAA520", nightMin: 10, special: "royal" },
+  { name: "Ancient Woodcutter", health: 30, damage: 16, speed: 0.8, size: 45, color: "#CD853F", nightMin: 12, special: "ancient" },
+  { name: "Ghost Woodcutter", health: 8, damage: 7, speed: 1.9, size: 26, color: "#D3D3D3", nightMin: 6, special: "ghost" },
+  { name: "Dragon Woodcutter", health: 28, damage: 18, speed: 1.5, size: 44, color: "#DC143C", nightMin: 13, special: "dragon" },
+  { name: "Phoenix Woodcutter", health: 20, damage: 15, speed: 1.6, size: 42, color: "#FF4500", nightMin: 11, special: "phoenix" },
+  { name: "Titan Woodcutter", health: 35, damage: 20, speed: 0.6, size: 50, color: "#000080", nightMin: 15, special: "titan" },
+  { name: "Celestial Woodcutter", health: 25, damage: 17, speed: 1.7, size: 43, color: "#4B0082", nightMin: 14, special: "celestial" },
+  { name: "Abyssal Woodcutter", health: 32, damage: 19, speed: 1.2, size: 47, color: "#000000", nightMin: 16, special: "abyssal" }
+];
+
+function generateInventorySlots() {
+  inventoryGrid.innerHTML = '';
+  for(let i=0; i < INVENTORY_SLOTS; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    slot.textContent = '';
+    inventoryGrid.appendChild(slot);
+  }
+}
+
+function generateCraftingMenu() {
+  craftingGrid.innerHTML = '';
+  craftingRecipes.forEach(recipe => {
+    const craftItem = document.createElement('div');
+    craftItem.className = 'craft-item';
+    
+    const canCraft = canCraftRecipe(recipe);
+    
+    craftItem.innerHTML = `
+      <p><strong>${recipe.name}</strong><br>${recipe.description}<br>
+      Cost: ${recipe.cost.bottles || 0} Bottles, ${recipe.cost.cans || 0} Cans</p>
+      <button id="craft-${recipe.id}" class="craft-button" ${canCraft ? '' : 'disabled'}>
+        Craft ${recipe.name}
+      </button>
+    `;
+    
+    craftingGrid.appendChild(craftItem);
+    
+    document.getElementById(`craft-${recipe.id}`).onclick = () => {
+      craftItemFunction(recipe);
+    };
+  });
+}
+
+function canCraftRecipe(recipe) {
+  return (!recipe.cost.bottles || game.bottles >= recipe.cost.bottles) &&
+         (!recipe.cost.cans || game.cans >= recipe.cost.cans);
+}
+
+function craftItemFunction(recipe) {
+  if (canCraftRecipe(recipe)) {
+    if (recipe.cost.bottles) game.bottles -= recipe.cost.bottles;
+    if (recipe.cost.cans) game.cans -= recipe.cost.cans;
+    
+    // Handle different crafted items
+    switch(recipe.id) {
+      case 'goblin':
+        spawnNatureGoblin();
+        break;
+      case 'sword':
+        game.swordCount++;
+        break;
+      case 'gloves':
+        game.hasGloves = true;
+        break;
+      case 'soldier':
+        spawnSoldier();
+        break;
+      case 'barricade':
+        game.barricades++;
+        break;
+      case 'potion':
+        game.potions++;
+        break;
+      case 'trap':
+        game.traps++;
+        break;
+      case 'upgrade':
+        game.upgrades++;
+        game.miningDuration *= 0.9; // 10% faster collection
+        break;
+      case 'super_sword':
+        game.swordCount += 2; // Better sword counts as 2
+        break;
+      // Add cases for other items as needed
+    }
+    
+    updateUI();
+    updateInventoryDisplay();
+    updateCraftButtons();
+  }
+}
+
+generateInventorySlots();
+generateCraftingMenu();
+
+function updateInventoryDisplay() {
+  const slots = inventoryGrid.children;
+  for(let i=0; i<INVENTORY_SLOTS; i++) slots[i].textContent = '';
+  
+  slots[0].textContent = game.bottles > 0 ? `Bottles: ${game.bottles}` : '';
+  slots[1].textContent = game.cans > 0 ? `Cans: ${game.cans}` : '';
+  slots[2].textContent = game.swordCount > 0 ? `Sword x${game.swordCount}` : '';
+  slots[3].textContent = game.hasGloves ? "Collecting Gloves" : '';
+  slots[4].textContent = game.barricades > 0 ? `Barricades: ${game.barricades}` : '';
+  slots[5].textContent = game.potions > 0 ? `Potions: ${game.potions}` : '';
+  slots[6].textContent = game.traps > 0 ? `Traps: ${game.traps}` : '';
+  slots[7].textContent = game.upgrades > 0 ? `Upgrades: ${game.upgrades}` : '';
+  
+  slots[2].style.border = (game.equippedItem === "sword") ? "2px solid yellow" : "2px solid #555";
+  slots[3].style.border = (game.equippedItem === "gloves") ? "2px solid yellow" : "2px solid #555";
+  swordCountUI.textContent = game.swordCount;
+}
+
+inventoryGrid.addEventListener('click', (e) => {
+  if (!e.target.classList.contains('slot')) return;
+  const txt = e.target.textContent.toLowerCase();
+  if (txt.includes("sword") && game.swordCount > 0) {
+    game.equippedItem = "sword";
+  } else if (txt.includes("gloves") && game.hasGloves) {
+    game.equippedItem = "gloves";
+  } else {
+    game.equippedItem = null;
+  }
+  updateInventoryDisplay();
+});
+
+function toggleInventory(){
+  if(game.craftingOpen) closeCrafting();
+  game.inventoryOpen = !game.inventoryOpen;
+  inventory.style.display = game.inventoryOpen ? 'block' : 'none';
+  inventory.setAttribute('aria-hidden', !game.inventoryOpen);
+}
+
+function openCrafting(){
+  if(game.inventoryOpen) toggleInventory();
+  game.craftingOpen = true;
+  craftingMenu.style.display = 'block';
+  craftingMenu.setAttribute('aria-hidden', 'false');
+  updateCraftButtons();
+}
+
+function closeCrafting(){
+  game.craftingOpen = false;
+  craftingMenu.style.display = 'none';
+  craftingMenu.setAttribute('aria-hidden', 'true');
+}
+
+function toggleCrafting(){
+  if(game.craftingOpen) closeCrafting();
+  else openCrafting();
+}
+
+function updateCraftButtons(){
+  craftingRecipes.forEach(recipe => {
+    const button = document.getElementById(`craft-${recipe.id}`);
+    if (button) {
+      button.disabled = !canCraftRecipe(recipe);
+    }
+  });
+}
+
+function startGame() {
+  game.gameStarted = true;
+  game.gameOver = false;
+  startScreen.style.display = 'none';
+  endScreen.style.display = 'none';
+  // Reset game state
+  game.bottles = 0;
+  game.cans = 0;
+  game.swordCount = 0;
+  game.creaturesDefeated = 0;
+  game.player.health = 100;
+  game.creatures = [];
+  game.natureGoblins = [];
+  game.soldiers = [];
+  game.time = 0;
+  game.nightLevel = 1;
+  game.equippedItem = null;
+  game.hasGloves = false;
+  game.barricades = 0;
+  game.potions = 0;
+  game.traps = 0;
+  game.upgrades = 0;
+  
+  // Reset resources
+  game.resources.forEach(res => res.harvested = false);
+  
+  // Create trees to protect
+  game.trees = [];
+  for (let i = 0; i < 5; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 300 + Math.random() * 200;
+    const x = WORLD_WIDTH / 2 + Math.cos(angle) * distance;
+    const y = WORLD_HEIGHT / 2 + Math.sin(angle) * distance;
+    game.trees.push({
+      x: x,
+      y: y,
+      size: 40,
+      health: 100,
+      maxHealth: 100
+    });
+  }
+  
+  updateUI();
+  updateInventoryDisplay();
+  updateCraftButtons();
+}
+
+function showEndScreen() {
+  game.gameOver = true;
+  endScreen.style.display = 'flex';
+  
+  // Update end screen stats
+  finalNightLevel.textContent = game.nightLevel;
+  finalCreaturesDefeated.textContent = game.creaturesDefeated;
+  finalResources.textContent = game.bottles + game.cans;
+  finalAllies.textContent = game.natureGoblins.length + game.soldiers.length;
+}
+
+function restartGame() {
+  startScreen.style.display = 'flex';
+  endScreen.style.display = 'none';
+}
+
+startButton.addEventListener('click', startGame);
+restartButton.addEventListener('click', restartGame);
+manualButton.addEventListener('click', () => {
+  manualModal.style.display = 'block';
+});
+closeManual.addEventListener('click', () => {
+  manualModal.style.display = 'none';
+});
+
+function randomRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function circleRectCollision(cx, cy, cr, rx, ry, rw, rh) {
+  const closestX = Math.max(rx, Math.min(cx, rx + rw));
+  const closestY = Math.max(ry, Math.min(cy, ry + rh));
+  const dx = cx - closestX;
+  const dy = cy - closestY;
+  return (dx*dx + dy*dy) < cr*cr;
+}
+
+// Draw health bar utility
+function drawHealthBar(sx, sy, width, height, percent, color) {
+  ctx.fillStyle = 'grey';
+  ctx.fillRect(sx, sy, width, height);
+  ctx.fillStyle = color;
+  ctx.fillRect(sx, sy, width * percent, height);
+  ctx.strokeStyle = 'black';
+  ctx.strokeRect(sx, sy, width, height);
+}
+
+// Draw label utility
+function drawLabel(sx, sy, text) {
+  ctx.fillStyle = 'white';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, sx, sy);
+}
+
+// Resource class 
+class Resource {
+  constructor(x, y, type) {
+    this.x = x; this.y = y;
+    this.type = type;
+    this.width = 20; this.height = 30;
+    this.harvested = false;
+    this.label = type === 'bottle' ? 'Plastic Bottle' : 'Tin Can';
+  }
+  draw(viewX, viewY) {
+    if(this.harvested) return;
+    const sx = this.x - viewX + canvas.width/2;
+    const sy = this.y - viewY + canvas.height/2;
+    if(this.type === 'bottle') {
+      // Draw plastic bottle
+      ctx.fillStyle = '#88ccff';
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx - 8, sy - 15);
+      ctx.lineTo(sx - 5, sy - 25);
+      ctx.lineTo(sx + 5, sy - 25);
+      ctx.lineTo(sx + 8, sy - 15);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.fillStyle = '#66aadd';
+      ctx.fillRect(sx - 5, sy - 25, 10, 5);
+    } else {
+      // Draw tin can
+      ctx.fillStyle = '#cccccc';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy - 10, 10, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#aaaaaa';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, 10, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#999999';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy + 8, 10, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Draw label above resource
+    if (!this.harvested) {
+      drawLabel(sx, sy - 40, this.label);
+    }
+  }
+  collidesWithCircle(cx, cy, radius) {
+    return circleRectCollision(cx, cy, radius, this.x - this.width/2, this.y - this.height, this.width, this.height);
+  }
+  harvest() {
+    if(!this.harvested) {
+      this.harvested = true;
+      if(this.type === 'bottle') game.bottles++;
+      else if(this.type === 'can') game.cans++;
+      updateUI();
+      updateInventoryDisplay();
+      updateCraftButtons();
+    }
+  }
+}
+
+// Creature (Woodcutter) class
+class Creature {
+  constructor(x, y, typeIndex) {
+    const type = woodcutterTypes[typeIndex];
+    this.x = x; this.y = y;
+    this.typeIndex = typeIndex;
+    this.name = type.name;
+    this.size = type.size;
+    this.speed = type.speed;
+    this.health = type.health;
+    this.maxHealth = type.health;
+    this.damage = type.damage;
+    this.color = type.color;
+    this.attackCooldown = 0;
+    this.targetTree = null;
+    this.special = type.special;
+  }
+  draw(viewX, viewY) {
+    const sx = this.x - viewX + canvas.width/2;
+    const sy = this.y - viewY + canvas.height/2;
+    if(game.isNight){
+      ctx.shadowColor = "rgba(255,100,0,0.7)";
+      ctx.shadowBlur = 15;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(sx, sy, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(sx - 7, sy - 5, 5, 0, Math.PI * 2);
+    ctx.arc(sx + 7, sy - 5, 5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw axe
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(sx + 15, sy - 5);
+    ctx.lineTo(sx + 30, sy + 5);
+    ctx.stroke();
+    
+    ctx.fillStyle = '#555';
+    ctx.beginPath();
+    ctx.rect(sx + 25, sy, 10, 5);
+    ctx.fill();
+    
+    drawHealthBar(sx - this.size, sy - this.size - 12, this.size * 2, 6, this.health/this.maxHealth, '#ff5555');
+    drawLabel(sx, sy - this.size - 18, this.name);
+  }
+  
+  findTargetTree() {
+    if (this.targetTree && this.targetTree.health > 0) return;
+    
+    let closestTree = null;
+    let minDist = Infinity;
+    
+    for (let tree of game.trees) {
+      if (tree.health <= 0) continue;
+      
+      const dist = Math.hypot(tree.x - this.x, tree.y - this.y);
+      if (dist < minDist) {
+        minDist = dist;
+        closestTree = tree;
+      }
+    }
+    
+    this.targetTree = closestTree;
+  }
+  
+  moveTowardsTarget() {
+    if (!this.targetTree || this.targetTree.health <= 0) {
+      this.findTargetTree();
+      if (!this.targetTree) return;
+    }
+    
+    let dx = this.targetTree.x - this.x;
+    let dy = this.targetTree.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    if(dist === 0) return;
+    dx /= dist; dy /= dist;
+    this.x += dx * this.speed;
+    this.y += dy * this.speed;
+  }
+  
+  hit(damage=1) {
+    this.health -= damage;
+  }
+  
+  updateAttackCooldown(delta) {
+    if(this.attackCooldown > 0) {
+      this.attackCooldown = Math.max(0, this.attackCooldown - delta);
+    }
+  }
+}
+
+// NatureGoblin class (renamed to Eco Defender)
+class NatureGoblin {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.size = 22;
+    this.speed = 1.5;
+    this.health = 10;
+    this.maxHealth = 10;
+    this.attackCooldown = 0;
+    this.damage = 5;
+  }
+  draw(viewX, viewY) {
+    const sx = this.x - viewX + canvas.width/2;
+    const sy = this.y - viewY + canvas.height/2;
+    if(game.isNight){
+      ctx.shadowColor = "rgba(0,255,0,0.7)";
+      ctx.shadowBlur = 15;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = '#3A7F3A';
+    ctx.beginPath();
+    ctx.arc(sx, sy, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx-6, sy-5, 6, 0, Math.PI * 2);
+    ctx.arc(sx+6, sy-5, 6, 0, Math.PI * 2);
+    ctx.fill();
+    drawHealthBar(sx - this.size, sy - this.size - 12, this.size * 2, 6, this.health / this.maxHealth, '#55ff55');
+    drawLabel(sx, sy - this.size - 18, 'Eco Defender');
+  }
+  moveTowardsZombie() {
+    if(game.creatures.length === 0) return;
+    let closest = null;
+    let minDist = Infinity;
+    for(let z of game.creatures){
+      const dist = Math.hypot(z.x - this.x, z.y - this.y);
+      if(dist < minDist){
+        minDist = dist;
+        closest = z;
+      }
+    }
+    if(closest){
+      let dx = closest.x - this.x;
+      let dy = closest.y - this.y;
+      let dist = Math.hypot(dx, dy);
+      if(dist === 0) return;
+      dx /= dist; dy /= dist;
+      this.x += dx * this.speed;
+      this.y += dy * this.speed;
+    }
+  }
+  hit(damage=1) {
+    this.health -= damage;
+  }
+  updateAttackCooldown(delta) {
+    if(this.attackCooldown > 0) {
+      this.attackCooldown = Math.max(0, this.attackCooldown - delta);
+    }
+  }
+}
+
+// Soldier class (renamed to Forest Ranger)
+class Soldier {
+  constructor(x, y){
+    this.x = x; this.y = y;
+    this.size = 24;
+    this.speed = 1.3;
+    this.health = 12;
+    this.maxHealth = 12;
+    this.attackCooldown = 0;
+    this.damage = 6;
+  }
+  draw(viewX, viewY) {
+    const sx = this.x - viewX + canvas.width/2;
+    const sy = this.y - viewY + canvas.height/2;
+    if(game.isNight){
+      ctx.shadowColor = "rgba(100,150,255,0.8)";
+      ctx.shadowBlur = 20;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = '#476fa3';
+    ctx.beginPath();
+    ctx.rect(sx - this.size, sy - this.size, this.size * 2, this.size * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    drawHealthBar(sx - this.size, sy - this.size - 12, this.size * 2, 6, this.health / this.maxHealth, '#99ccff');
+    drawLabel(sx, sy - this.size - 18, 'Forest Ranger');
+  }
+  moveTowardsZombie() {
+    if(game.creatures.length === 0) return;
+    let closest = null;
+    let minDist = Infinity;
+    for(let z of game.creatures){
+      const dist = Math.hypot(z.x - this.x, z.y - this.y);
+      if(dist < minDist){
+        minDist = dist;
+        closest = z;
+      }
+    }
+    if(closest){
+      let dx = closest.x - this.x;
+      let dy = closest.y - this.y;
+      let dist = Math.hypot(dx, dy);
+      if(dist === 0) return;
+      dx /= dist; dy /= dist;
+      this.x += dx * this.speed;
+      this.y += dy * this.speed;
+    }
+  }
+  updateAttackCooldown(delta) {
+    if(this.attackCooldown > 0) {
+      this.attackCooldown = Math.max(0, this.attackCooldown - delta);
+    }
+  }
+  hit(damage=1){
+    this.health -= damage;
+  }
+}
+
+function drawTree(tree, viewX, viewY) {
+  const sx = tree.x - viewX + canvas.width/2;
+  const sy = tree.y - viewY + canvas.height/2;
+  
+  // Draw trunk
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(sx - 10, sy, 20, 60);
+  
+  // Draw leaves
+  ctx.fillStyle = '#2E8B57';
+  ctx.beginPath();
+  ctx.arc(sx, sy - 30, 40, 0, Math.PI * 2);
+  ctx.fill();
+  
+  drawHealthBar(sx - 30, sy - 70, 60, 8, tree.health/tree.maxHealth, '#55ff55');
+  drawLabel(sx, sy - 80, 'Ancient Tree');
+}
+
+function drawBackground() {
+  if(game.isNight){
+    let grad = ctx.createLinearGradient(0,0,0,canvas.height);
+    grad.addColorStop(0,"#000010");
+    grad.addColorStop(1,"#001a33");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    // stars
+    for(let i=0;i<80;i++){
+      ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.8})`;
+      ctx.fillRect(Math.random()*canvas.width,Math.random()*canvas.height,2,2);
+    }
+  } else {
+    let grad=ctx.createLinearGradient(0,0,0,canvas.height);
+    grad.addColorStop(0,'#7ec850');
+    grad.addColorStop(1,'#356d21');
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+}
+
+function movePlayer(){
+  if(game.inventoryOpen || game.craftingOpen || !game.gameStarted || game.gameOver) return;
+  let newX=game.player.x;
+  let newY=game.player.y;
+  if(game.keysPressed['arrowup'] || game.keysPressed['w']) newY -= game.player.speed;
+  if(game.keysPressed['arrowdown'] || game.keysPressed['s']) newY += game.player.speed;
+  if(game.keysPressed['arrowleft'] || game.keysPressed['a']) newX -= game.player.speed;
+  if(game.keysPressed['arrowright'] || game.keysPressed['d']) newX += game.player.speed;
+  if(canMoveTo(newX,newY)){
+    game.player.x=newX;
+    game.player.y=newY;
+  }
+}
+
+function canMoveTo(x,y){
+  if(x-game.player.size<0 || y-game.player.size <0 || x+game.player.size >WORLD_WIDTH || y+game.player.size>WORLD_HEIGHT)
+    return false;
+  for(let res of game.resources){
+    if(!res.harvested && res.collidesWithCircle(x,y,game.player.size)) return false;
+  }
+  return true;
+}
+
+function handleMining(deltaTime){
+  if(!game.spacePressed || !game.gameStarted || game.gameOver){
+    game.miningTarget=null;
+    game.miningTime=0;
+    miningBar.style.display='none';
+    return;
+  }
+  if(game.equippedItem==="sword" && game.swordCount>0){
+    handleSwordAttack(deltaTime);
+    return;
+  }
+  if(game.miningTarget && !game.miningTarget.harvested){
+    const dist=Math.hypot(game.miningTarget.x - game.player.x, game.miningTarget.y - game.player.y);
+    if(dist>50){
+      game.miningTarget=null;
+      game.miningTime=0;
+      miningBar.style.display='none';
+      return;
+    }
+  }
+  if(!game.miningTarget){
+    let closest=null;
+    let closestDistance=50;
+    for(let res of game.resources){
+      if(res.harvested) continue;
+      const dist = Math.hypot(res.x - game.player.x, res.y - game.player.y);
+      if(dist<closestDistance){
+        closestDistance=dist;
+        closest=res;
+      }
+    }
+    game.miningTarget=closest;
+    if(!closest){
+      miningBar.style.display='none';
+      return;
+    }
+  }
+  game.miningTime += deltaTime;
+  miningBar.style.display='block';
+  let miningDur = game.miningDuration;
+  if(game.equippedItem==="gloves" && game.hasGloves) miningDur=2.45;
+  if(game.upgrades > 0) miningDur *= Math.pow(0.9, game.upgrades); // 10% faster per upgrade
+  let progressPercent=Math.min(100,(game.miningTime/miningDur)*100);
+  miningProgress.style.width=progressPercent+'%';
+  if(game.miningTime>=miningDur){
+    game.miningTarget.harvest();
+    game.miningTarget = null;
+    game.miningTime = 0;
+    miningBar.style.display='none';
+  }
+}
+
+function handleSwordAttack(deltaTime){
+  if(!game.spacePressed || game.swordCount===0 || !game.gameStarted || game.gameOver) return;
+  if(game.player.swordCooldown>0){
+    game.player.swordCooldown = Math.max(0, game.player.swordCooldown-deltaTime);
+    return;
+  }
+  let attacked=false;
+  for(let i=game.creatures.length-1;i>=0;i--){
+    let zombie=game.creatures[i];
+    const dist=Math.hypot(zombie.x-game.player.x, zombie.y-game.player.y);
+    if(dist<60){
+      // Calculate damage (more if super sword)
+      const damage = game.swordCount >= 2 ? 6 : 4;
+      zombie.hit(damage);
+      game.player.swordCooldown=1;
+      if(zombie.health<=0){
+        game.creatures.splice(i,1);
+        game.creaturesDefeated++;
+        updateUI();
+      }
+      attacked=true;
+      break;
+    }
+  }
+  if(!attacked){
+    game.player.swordCooldown=0;
+  }
+}
+
+function spawnCreature(){
+  if(!game.isNight || !game.gameStarted || game.gameOver) return;
+  
+  // Determine which woodcutter types can spawn at this night level
+  const availableTypes = woodcutterTypes.filter(type => game.nightLevel >= type.nightMin);
+  const typeWeights = availableTypes.map((type, index) => {
+    // Make earlier types more common even at higher levels
+    const weight = Math.max(1, 10 - type.nightMin);
+    return weight;
+  });
+  
+  // Select a random type weighted by availability
+  let totalWeight = typeWeights.reduce((sum, weight) => sum + weight, 0);
+  let random = Math.random() * totalWeight;
+  let selectedIndex = 0;
+  for (let i = 0; i < typeWeights.length; i++) {
+    random -= typeWeights[i];
+    if (random <= 0) {
+      selectedIndex = i;
+      break;
+    }
+  }
+  
+  const edge = Math.floor(randomRange(0,4));
+  let x,y;
+  switch(edge){
+    case 0: x=0; y=randomRange(0,WORLD_HEIGHT); break;
+    case 1: x=WORLD_WIDTH; y=randomRange(0,WORLD_HEIGHT); break;
+    case 2: x=randomRange(0,WORLD_WIDTH); y=0; break;
+    case 3: x=randomRange(0,WORLD_WIDTH); y=WORLD_HEIGHT; break;
+  }
+  
+  // Scale health and damage with night level
+  const type = availableTypes[selectedIndex];
+  const healthScale = 1 + (game.nightLevel-type.nightMin)*0.3;
+  const damageScale = 1 + (game.nightLevel-type.nightMin)*0.25;
+  
+  const creature = new Creature(x, y, woodcutterTypes.indexOf(type));
+  creature.health *= healthScale;
+  creature.maxHealth = creature.health;
+  creature.damage *= damageScale;
+  
+  game.creatures.push(creature);
+}
+
+function spawnNatureGoblin(){
+  const angle = Math.random()*Math.PI*2;
+  const radius = 40;
+  const x = game.player.x + Math.cos(angle)*radius;
+  const y = game.player.y + Math.sin(angle)*radius;
+  game.natureGoblins.push(new NatureGoblin(x,y));
+}
+
+function spawnSoldier(){
+  const angle = Math.random()*Math.PI*2;
+  const radius = 50;
+  const x = game.player.x + Math.cos(angle)*radius;
+  const y = game.player.y + Math.sin(angle)*radius;
+  game.soldiers.push(new Soldier(x,y));
+}
+
+function updateUI() {
+  bottleCounter.textContent = game.bottles;
+  canCounter.textContent = game.cans;
+  swordCountUI.textContent = game.swordCount;
+  playerHealthCounter.textContent = game.player.health;
+  creaturesDefeatedCounter.textContent = game.creaturesDefeated;
+  
+  // Count remaining trees
+  const treesAlive = game.trees.filter(tree => tree.health > 0).length;
+  treesRemainingCounter.textContent = treesAlive;
+  
+  nightLevelDisplay.textContent = game.nightLevel;
+  timeOfDayDisplay.textContent = game.isNight ? 'Night' : 'Day';
+}
+
+function updateDayNightCycle(deltaTime){
+  if(!game.gameStarted || game.gameOver) return;
+  game.time += deltaTime;
+  if(game.time >= game.dayLength){
+    game.time -= game.dayLength;
+    if(game.isNight){
+      game.nightLevel++;
+      game.dayLength = Math.min(600, game.dayLength*1.1);
+      game.player.health = Math.min(game.player.maxHealth, game.player.health + 10);
+      for(const goblin of game.natureGoblins){
+        goblin.health = Math.min(goblin.maxHealth, goblin.health + 5);
+      }
+      for(const soldier of game.soldiers){
+        soldier.health = Math.min(soldier.maxHealth, soldier.health + 5);
+      }
+      updateUI();
+    }
+  }
+  game.isNight = game.time > game.dayLength/2;
+}
+
+function handleCreatureAttacks(deltaTime){
+  if(!game.gameStarted || game.gameOver) return;
+  
+  // Check if all trees are destroyed
+  const treesAlive = game.trees.filter(tree => tree.health > 0).length;
+  if (treesAlive === 0) {
+    showEndScreen();
+    return;
+  }
+  
+  for(let i=game.creatures.length-1;i>=0;i--){
+    const zombie = game.creatures[i];
+    zombie.updateAttackCooldown(deltaTime);
+    
+    if(game.isNight) {
+      zombie.findTargetTree();
+      zombie.moveTowardsTarget();
+    }
+    
+    let attackedGoblin = false;
+    for(let j=game.natureGoblins.length-1;j>=0;j--){
+      const goblin = game.natureGoblins[j];
+      let dist = Math.hypot(zombie.x - goblin.x, zombie.y - goblin.y);
+      if(dist < zombie.size + goblin.size){
+        if(zombie.attackCooldown === 0){
+          goblin.hit(zombie.damage * 0.5);
+          zombie.attackCooldown = 1.5;
+          if(goblin.health <= 0) game.natureGoblins.splice(j,1);
+        }
+        attackedGoblin = true;
+        break;
+      }
+    }
+    if(attackedGoblin) continue;
+    
+    for(let j=game.soldiers.length-1;j>=0;j--){
+      const soldier = game.soldiers[j];
+      let dist = Math.hypot(zombie.x - soldier.x, zombie.y - soldier.y);
+      if(dist < zombie.size + soldier.size){
+        if(zombie.attackCooldown === 0){
+          soldier.hit(zombie.damage * 0.5);
+          zombie.attackCooldown = 1.5;
+          if(soldier.health <= 0) game.soldiers.splice(j,1);
+        }
+        attackedGoblin = true;
+        break;
+      }
+    }
+    if(attackedGoblin) continue;
+    
+    // Attack trees
+    if(zombie.targetTree && zombie.targetTree.health > 0) {
+      let distToTree = Math.hypot(zombie.x - zombie.targetTree.x, zombie.y - zombie.targetTree.y);
+      if(distToTree < zombie.targetTree.size + zombie.size && zombie.attackCooldown === 0) {
+        zombie.targetTree.health -= zombie.damage;
+        zombie.attackCooldown = 1.5;
+        updateUI();
+        continue;
+      }
+    }
+    
+    let distToPlayer = Math.hypot(zombie.x - game.player.x, zombie.y - game.player.y);
+    if(distToPlayer < game.player.size + zombie.size && zombie.attackCooldown === 0){
+      game.player.health -= zombie.damage;
+      zombie.attackCooldown = 1.5;
+      if(game.player.health <= 0){
+        showEndScreen();
+        return;
+      }
+      updateUI();
+      let pushX = zombie.x - game.player.x;
+      let pushY = zombie.y - game.player.y;
+      let pushDist = Math.hypot(pushX, pushY);
+      zombie.x += (pushX / pushDist) * zombie.speed * 10;
+      zombie.y += (pushY / pushDist) * zombie.speed * 10;
+    }
+  }
+  
+  for(let i=game.natureGoblins.length-1;i>=0;i--){
+    const goblin = game.natureGoblins[i];
+    goblin.updateAttackCooldown(deltaTime);
+    goblin.moveTowardsZombie();
+    for(let j=game.creatures.length-1;j>=0;j--){
+      const zombie = game.creatures[j];
+      let dist = Math.hypot(zombie.x - goblin.x, zombie.y - goblin.y);
+      if(dist < goblin.size + zombie.size && goblin.attackCooldown === 0){
+        zombie.hit(goblin.damage);
+        goblin.attackCooldown = 1;
+        if(zombie.health <= 0){
+          game.creatures.splice(j,1);
+          game.creaturesDefeated++;
+          updateUI();
+        }
+        break;
+      }
+    }
+    if(goblin.health <= 0) game.natureGoblins.splice(i,1);
+  }
+  
+  for(let i=game.soldiers.length-1;i>=0;i--){
+    const soldier = game.soldiers[i];
+    soldier.updateAttackCooldown(deltaTime);
+    soldier.moveTowardsZombie();
+    for(let j=game.creatures.length-1;j>=0;j--){
+      const zombie = game.creatures[j];
+      let dist = Math.hypot(zombie.x - soldier.x, zombie.y - soldier.y);
+      if(dist < soldier.size + zombie.size && soldier.attackCooldown === 0){
+        zombie.hit(soldier.damage);
+        soldier.attackCooldown = 1;
+        if(zombie.health <= 0){
+          game.creatures.splice(j,1);
+          game.creaturesDefeated++;
+          updateUI();
+        }
+        break;
+      }
+    }
+    if(soldier.health <= 0) game.soldiers.splice(i,1);
+  }
+}
+
+function drawPlayer() {
+  const sx = canvas.width/2;
+  const sy = canvas.height/2;
+  if(game.isNight){
+    ctx.shadowColor = "rgba(0,170,255,0.8)";
+    ctx.shadowBlur = 20;
+  } else {
+    ctx.shadowBlur = 0;
+  }
+  ctx.fillStyle = '#23527c';
+  ctx.beginPath();
+  ctx.arc(sx, sy, game.player.size, 0, Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(sx - 6, sy - 5, 5, 0, Math.PI*2);
+  ctx.arc(sx + 6, sy - 5, 5, 0, Math.PI*2);
+  ctx.fill();
+  if(game.equippedItem === "sword" && game.swordCount > 0 && game.player.swordCooldown > 0){
+    ctx.save();
+    ctx.translate(sx, sy);
+    let progress = 1 - game.player.swordCooldown;
+    let swingAngle = Math.sin(progress * Math.PI) * 1.2;
+    ctx.rotate(swingAngle);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = 'white';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(40, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+  drawHealthBar(sx - game.player.size, sy - game.player.size - 12, game.player.size * 2, 6, game.player.health/game.player.maxHealth, '#55aaff');
+  drawLabel(sx, sy - game.player.size - 18, 'Player');
+}
+
+function gameLoop(timestamp=0) {
+  let deltaTime = ((timestamp - lastTimestamp)/1000) || 0;
+  lastTimestamp = timestamp;
+
+  updateDayNightCycle(deltaTime);
+
+  if(!game.inventoryOpen && !game.craftingOpen && game.gameStarted && !game.gameOver){
+    movePlayer();
+    handleMining(deltaTime);
+  }
+  drawBackground();
+
+  const viewX = game.player.x;
+  const viewY = game.player.y;
+
+  for(let res of game.resources){
+    if(res.x > viewX - canvas.width/2 && res.x < viewX + canvas.width/2 &&
+       res.y > viewY - canvas.height/2 && res.y < viewY + canvas.height/2){
+      res.draw(viewX, viewY);
+    }
+  }
+  
+  // Draw trees
+  for(let tree of game.trees) {
+    if(tree.x > viewX - canvas.width/2 && tree.x < viewX + canvas.width/2 &&
+       tree.y > viewY - canvas.height/2 && tree.y < viewY + canvas.height/2 && tree.health > 0){
+      drawTree(tree, viewX, viewY);
+    }
+  }
+  
+  if(game.gameStarted && !game.gameOver) {
+    drawPlayer();
+    for(const goblin of game.natureGoblins) goblin.draw(viewX, viewY);
+    for(const soldier of game.soldiers) soldier.draw(viewX, viewY);
+    handleCreatureAttacks(deltaTime);
+
+    if(game.isNight){
+      for(let c of game.creatures) c.draw(viewX, viewY);
+    }
+  }
+  
+  requestAnimationFrame(gameLoop);
+}
+
+let lastTimestamp=0;
+requestAnimationFrame(gameLoop);
+
+setInterval(() => { if(game.isNight) spawnCreature(); }, 4000);
+
+function initResources() {
+  for(let i=0; i<150; i++){
+    const x = randomRange(0, WORLD_WIDTH);
+    const y = randomRange(50, WORLD_HEIGHT);
+    const type = (i % 3 === 0) ? 'can' : 'bottle';
+    game.resources.push(new Resource(x,y,type));
+  }
+}
+initResources();
+
+updateUI();
+updateInventoryDisplay();
+updateCraftButtons();
+
+window.addEventListener('keydown', (e) => {
+  if(e.key.toLowerCase() === 'e') toggleInventory();
+  if(e.key.toLowerCase() === 'c') toggleCrafting();
+  if(!game.inventoryOpen && !game.craftingOpen && game.gameStarted && !game.gameOver){
+    if(e.code === 'Space') game.spacePressed = true;
+    else game.keysPressed[e.key.toLowerCase()] = true;
+  }
+});
+window.addEventListener('keyup', (e) => {
+  if(e.code === 'Space'){
+    game.spacePressed = false;
+    game.miningTarget = null;
+    game.miningTime = 0;
+    miningBar.style.display = 'none';
+  } else {
+    game.keysPressed[e.key.toLowerCase()] = false;
+  }
+});
+</script>
+</body>
+</html>
