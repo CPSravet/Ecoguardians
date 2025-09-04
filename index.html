@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Eco Guardians — Final (150×150 rivers no islands)</title>
+<style>
+:root{--bg:#071018;--card:rgba(6,8,10,.82);--accent:#58b4ff}
+html,body{height:100%;margin:0;background:var(--bg);color:#dff;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+.wrap{height:100vh;display:grid;place-items:center;position:relative}
+canvas#game{width:1240px;height:760px;border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.6);background:#08101a}
+.hud{position:absolute;left:18px;top:14px;pointer-events:none}
+.card{background:var(--card);padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.04)}
+.statrow{display:flex;gap:10px;align-items:center}
+.bar{width:300px;height:14px;background:#2b3037;border-radius:8px;overflow:hidden}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#aeeeff)}
+.kbd{padding:3px 7px;border-radius:6px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);font-size:12px}
+#minimapWrap{position:absolute;right:18px;top:14px}
+#minimap{width:220px;height:220px;border-radius:8px;background:#000;display:block}
+#loader{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(180deg,rgba(0,0,0,.5),rgba(0,0,0,.66));z-index:40}
+#loaderBox{background:rgba(6,8,10,.96);padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,.06);text-align:center}
+#progress{height:10px;background:#222;border-radius:8px;margin-top:12px;overflow:hidden}
+#progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#aeeeff)}
+#startHint{font-size:14px;margin-top:12px;color:#bcdff5;display:none}
+#toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:rgba(0,0,0,.72);padding:8px 12px;border-radius:10px;color:#dff;opacity:0;transition:opacity .22s}
+#toast.show{opacity:1}
+#questFlash{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:44px;font-weight:800;color:#7ef0a1;pointer-events:none;opacity:0;transition:opacity .28s, transform .28s}
+#questFlash.show{opacity:1;transform:translate(-50%,-52%)}
+.controls{position:absolute;right:18px;bottom:18px;z-index:20}
+.btn{background:rgba(255,255,255,.03);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);color:#dff;cursor:pointer}
+footer.disclaimer{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);color:#9fbcd6;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game" width="1240" height="760" aria-label="Eco Guardians game"></canvas>
+
+  <div class="hud">
+    <div class="card" style="margin-bottom:10px">
+      <div class="statrow"><strong>Air</strong><div class="bar" id="bar-air"><i style="width:70%"></i></div><div id="airTxt">70%</div></div>
+      <div class="statrow"><strong>Water</strong><div class="bar" id="bar-water"><i style="width:70%"></i></div><div id="waterTxt">70%</div></div>
+      <div class="statrow"><strong>Biodiv</strong><div class="bar" id="bar-bio"><i style="width:65%"></i></div><div id="bioTxt">65%</div></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div class="kbd" id="energyTxt">36</div>
+        <div class="kbd" id="boatLvl">BoatLv 1</div>
+        <div class="kbd" id="boatParts">Parts 0</div>
+      </div>
+      <div style="font-size:12px;color:#bcdff5;margin-top:8px">Controls: WASD / Arrows • Plant P • Clean E • Purify R • Quest Q • Board B • Upgrade U • Dash (Lv4) Space • M mute</div>
+    </div>
+
+    <div class="card" style="font-size:13px">
+      <strong>Quest</strong> — <span id="questTxt">None</span>
+      <div id="questTimer" style="font-size:12px;color:#bcdff5;margin-top:6px"></div>
+    </div>
+  </div>
+
+  <div id="minimapWrap" class="card" style="padding:8px">
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <div style="font-size:12px;color:#cfe7f9;margin-top:6px">Minimap: player(red) • boat(brown) • pollution (brown) • fire (orange)</div>
+  </div>
+
+  <div class="controls">
+    <button id="btnMute" class="btn">Mute M</button>
+  </div>
+
+  <div id="toast"></div>
+  <div id="questFlash"></div>
+
+  <div id="loader" aria-hidden="false">
+    <div id="loaderBox">
+      <div style="font-size:20px;font-weight:700">Eco Guardians</div>
+      <div style="margin-top:8px;color:#d0e9ff">Generating world & assets — Please wait</div>
+      <div id="progress"><i></i></div>
+      <div id="startHint">Loaded. Press <strong>SPACE</strong> to start (audio will begin).</div>
+      <div style="font-size:12px;color:#bcdff5;margin-top:8px">Music: modern/adventure synth — press SPACE to allow audio.</div>
+    </div>
+  </div>
+
+  <footer class="disclaimer">Procedural assets & synthesized audio — fully embedded (no external files).</footer>
+</div>
+
+<script>
+/* Eco Guardians — Final HTML (no islands, randomized river width)
+   - 150x150 map
+   - fewer long rivers, randomized width along the path, no islands
+   - boat only in water, persistent, modern motorboat look (procedural)
+   - pollution single-source slow spread, respawn 45-60s
+   - wildfires after pollution cleaned
+   - quests, upgrades, minimap, synth music & SFX
+   - low tree density
+*/
+
+(() => {
+  // canvas
+  const canvas = document.getElementById('game');
+  const g = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const TILE = 32;
+
+  // map dims
+  const MAP_W = 150, MAP_H = 150;
+
+  // constants
+  const GRASS=1, FOREST=2, SAND=3, ROCK=4, WATER=5;
+  const PAL = { water0:'#285fb3', water1:'#4e92e4', foam:'#e6f3ff', g0:'#58b86a', g1:'#3f8a4f', sand:'#d6c796', rock:'#7f7f89', poll:'#6e5a30', burnt:'#3c281e', boat:'#7d5336' };
+
+  const PLAYER_SPEED = 300;
+  const BOAT_BASE_SPEED = 760;
+  const BOAT_SPEEDS = [0, BOAT_BASE_SPEED, 920, 1100, 1400];
+  const BOAT_ACCEL = 1800, BOAT_TURN = 6;
+  const DASH_SPEED = 2200, DASH_COOLDOWN = 8000;
+  const POLL_TICK = 5000, POLL_RESPAWN_MIN = 45000, POLL_RESPAWN_VAR = 15000;
+  const FIRE_TICK = 3500;
+  const TREE_SPAWN_PROB = 0.02;
+  const QUEST_DURATION = 75;
+  const UPGRADE_COSTS = [0,5,10,20];
+  const BOAT_BOARD_RADIUS = 2;
+
+  // state & world
+  const world = { tiles: Array.from({length:MAP_W}, ()=> Array(MAP_H).fill(GRASS)), deco: Array.from({length:MAP_W}, ()=> Array(MAP_H).fill(null)), props: [], waterSet: new Set() };
+
+  let elev=null, moist=null;
+  let player = { x:0, y:0 }, camera=[0,0];
+  let air=70, waterStat=70, bio=65, energy=36;
+
+  let questActive=false, questType=null, questGoal=0, questProgress=0, questTimer=0, questNPC=null, lastQuestType=null;
+
+  let pollutionActive=false, pollutedTiles=new Set(), pollutionSource=null, nextPollutionAt=0, lastPollTick=0;
+  let pendingWildfire=false, wildfireActive=false, fires=[], wildfireDelayUntil=0, lastFireTick=0;
+
+  let boat = { pixelX:0, pixelY:0, vx:0, vy:0, angle:0, propAngle:0, inBoat:false, level:1, parts:0, lastDashAt:0 };
+
+  // UI elements
+  const barAir = document.getElementById('bar-air').firstElementChild;
+  const barWater = document.getElementById('bar-water').firstElementChild;
+  const barBio = document.getElementById('bar-bio').firstElementChild;
+  const airTxt = document.getElementById('airTxt'), waterTxt = document.getElementById('waterTxt'), bioTxt = document.getElementById('bioTxt');
+  const energyTxt = document.getElementById('energyTxt'), boatLvlEl = document.getElementById('boatLvl'), boatPartsEl = document.getElementById('boatParts');
+  const questTxt = document.getElementById('questTxt'), questTimerEl = document.getElementById('questTimer');
+  const progressBar = document.querySelector('#progress > i'), loader = document.getElementById('loader'), startHint = document.getElementById('startHint');
+  const toastEl = document.getElementById('toast'), questFlash = document.getElementById('questFlash');
+  const minimap = document.getElementById('minimap'), mg = minimap.getContext('2d');
+  const btnMute = document.getElementById('btnMute');
+
+  function toast(msg, t=1500){ toastEl.textContent = msg; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'), t); }
+  function flash(msg, color='#7ef0a1', t=1200){ questFlash.textContent = msg; questFlash.style.color = color; questFlash.classList.add('show'); setTimeout(()=>questFlash.classList.remove('show'), t); }
+
+  // RNG
+  function RNG(seed=1337){ let s=seed>>>0; return ()=> (s=(s*1664525+1013904223)>>>0)/2**32; }
+  const rnd = RNG(424242);
+
+  // ---------- generation pipeline ----------
+  const pipeline = [
+    {name:'noise', fn: genNoise},
+    {name:'rivers', fn: carveRivers},
+    {name:'tiles', fn: genTiles},
+    {name:'props', fn: genProps},
+    {name:'placeBoat', fn: placeBoat}
+  ];
+
+  (async function runPipeline(){
+    for(let i=0;i<pipeline.length;i++){
+      try{ await pipeline[i].fn(); } catch(e){ console.error('pipeline error', e); }
+      progressBar.style.width = Math.round((i+1)/pipeline.length*100) + '%';
+      await new Promise(r=>setTimeout(r,120));
+    }
+    startHint.style.display='block';
+    window.addEventListener('keydown', onFirstSpace);
+  })();
+
+  function onFirstSpace(e){ if(e.code === 'Space'){ window.removeEventListener('keydown', onFirstSpace); loader.style.display='none'; startGame(); } }
+
+  // noise
+  function makeNoise(w,h,seed,oct=3){
+    const R = RNG(seed);
+    let base = Array.from({length:w}, ()=> Array.from({length:h}, ()=> R()));
+    const blur=(g,rounds=1)=>{ for(let r=0;r<rounds;r++){ const ng=Array.from({length:w}, ()=> Array(h).fill(0)); for(let x=0;x<w;x++) for(let y=0;y<h;y++){ let acc=0,cnt=0; for(let ix=x-1;ix<=x+1;ix++) for(let iy=y-1;iy<=y+1;iy++) if(ix>=0&&ix<w&&iy>=0&&iy<h){ acc+=g[ix][iy]; cnt++; } ng[x][y]=acc/cnt; } g=ng; } return g; };
+    let total=Array.from({length:w}, ()=> Array(h).fill(0));
+    let amp=1, norm=0;
+    for(let o=0;o<oct;o++){
+      base = blur(base, 2+o);
+      for(let x=0;x<w;x++) for(let y=0;y<h;y++) total[x][y] += base[x][y] * amp;
+      norm += amp; amp *= .5;
+      base = Array.from({length:w}, ()=> Array.from({length:h}, ()=> R()));
+    }
+    for(let x=0;x<w;x++) for(let y=0;y<h;y++) total[x][y] /= norm;
+    return total;
+  }
+
+  function genNoise(){ elev = makeNoise(MAP_W, MAP_H, 11111, 4); moist = makeNoise(MAP_W, MAP_H, 22222, 3); }
+
+  // Rivers: fewer long rivers, randomized width along path, NO islands
+  class Rivers {
+    constructor(w,h,elev){ this.w=w; this.h=h; this.elev=elev; this.water=new Set(); }
+    key(x,y){ return (x<<16)|y; }
+    carve_from(sx,sy,len=1400){
+      let x=sx,y=sy,last=[0,0];
+      for(let i=0;i<len;i++){
+        // width varying along path
+        const width = 1 + Math.floor(1 + Math.abs(Math.sin(i*0.12 + (sx+sy)*0.03))*2 + (Math.random()*1.2));
+        for(let wx=-width; wx<=width; wx++) for(let wy=-width; wy<=width; wy++){
+          const nx=x+wx, ny=y+wy;
+          if(nx>=0&&nx<this.w&&ny>=0&&ny<this.h) this.water.add(this.key(nx,ny));
+        }
+        // choose next step preferring downhill & smooth turns
+        let best=null, bestscore=1e9;
+        const choices = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]];
+        for(const [dx,dy] of choices){
+          const nx=x+dx, ny=y+dy; if(!(nx>=0&&nx<this.w&&ny>=0&&ny<this.h)) continue;
+          const drop = (this.elev[nx][ny] || 0) - (this.elev[x][y] || 0);
+          const inertia = 0.25*((dx-last[0])**2 + (dy-last[1])**2);
+          const score = drop*3.0 + inertia + Math.random()*0.08;
+          if(score < bestscore){ bestscore=score; best=[nx,ny]; }
+        }
+        if(!best) break;
+        last=[best[0]-x,best[1]-y];
+        x=best[0]; y=best[1];
+        if(x===0||y===0||x===this.w-1||y===this.h-1) break;
+      }
+    }
+    connectComponents(){
+      const W=this.w,H=this.h;
+      const key = (x,y)=> (x<<16)|y;
+      const seen=new Set(), comps=[];
+      for(const k of this.water){
+        if(seen.has(k)) continue;
+        const q=[k]; seen.add(k); const comp=[];
+        while(q.length){
+          const cur=q.shift(); comp.push(cur);
+          const cx=(cur>>16)&0xffff, cy=cur&0xffff;
+          for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+            const nx=cx+dx, ny=cy+dy; if(nx<0||nx>=W||ny<0||ny>=H) continue;
+            const kk=key(nx,ny);
+            if(!seen.has(kk) && this.water.has(kk)){ seen.add(kk); q.push(kk); }
+          }
+        }
+        comps.push(comp);
+      }
+      if(comps.length<=1) return;
+      comps.sort((a,b)=>b.length-a.length);
+      const main = comps[0].map(k=>[(k>>16)&0xffff, k&0xffff]);
+      const others = comps.slice(1);
+      for(const comp of others){
+        let bestPair=null, bestDist=1e12;
+        for(const k1 of comp){
+          const x1=(k1>>16)&0xffff, y1=k1&0xffff;
+          for(const k2 of main){
+            const dx=x1-k2[0], dy=y1-k2[1], d=dx*dx+dy*dy;
+            if(d<bestDist){ bestDist=d; bestPair=[[x1,y1],[k2[0],k2[1]]]; }
+          }
+        }
+        if(!bestPair) continue;
+        carveChannel(this, bestPair[0][0],bestPair[0][1],bestPair[1][0],bestPair[1][1], 1 + Math.floor(Math.random()*2));
+      }
+    }
+  }
+
+  function carveChannel(riv, x1,y1,x2,y2, halfWidth=1){
+    let dx=Math.abs(x2-x1), sx=x1<x2?1:-1;
+    let dy=-Math.abs(y2-y1), sy=y1<y2?1:-1;
+    let err=dx+dy, e2; let x=x1,y=y1;
+    while(true){
+      for(let wx=-halfWidth;wx<=halfWidth;wx++) for(let wy=-halfWidth;wy<=halfWidth;wy++){
+        const nx=x+wx, ny=y+wy; if(nx>=0&&nx<riv.w&&ny>=0&&ny<riv.h) riv.water.add(riv.key(nx,ny));
+      }
+      if(x===x2 && y===y2) break;
+      e2 = 2*err;
+      if(e2 >= dy){ err += dy; x += sx; }
+      if(e2 <= dx){ err += dx; y += sy; }
+    }
+  }
+
+  function carveRivers(){
+    const riv = new Rivers(MAP_W, MAP_H, elev);
+    const riverCount = 3 + Math.floor(Math.random()*3);
+    for(let i=0;i<riverCount;i++){
+      // choose start near higher elevation broadly across map so rivers span map
+      let sx = Math.floor(Math.random()*MAP_W), sy = Math.floor(Math.random()*MAP_H);
+      for(let tries=0; tries<500; tries++){
+        const rx=Math.floor(Math.random()*MAP_W), ry=Math.floor(Math.random()*MAP_H);
+        if(elev[rx][ry] > elev[sx][sy] && elev[rx][ry] > 0.52){ sx=rx; sy=ry; break; }
+      }
+      riv.carve_from(sx, sy, 1400 + Math.floor(Math.random()*800));
+    }
+    // small side branches
+    const watersArr = [...riv.water].map(k=>[(k>>16)&0xffff, k&0xffff]);
+    for(let i=0;i<Math.floor(watersArr.length*0.015); i++){
+      const p = watersArr[Math.floor(Math.random()*watersArr.length)];
+      riv.carve_from(p[0], p[1], 60 + Math.floor(Math.random()*120));
+    }
+    // connect components to ensure full boat travel
+    riv.connectComponents();
+
+    // IMPORTANT: do NOT create islands — leave rivers as continuous open water
+    world.waterSet = riv.water;
+  }
+
+  // tiles
+  function genTiles(){
+    for(let x=0;x<MAP_W;x++) for(let y=0;y<MAP_H;y++){
+      if(world.waterSet.has((x<<16)|y)) world.tiles[x][y] = WATER;
+      else {
+        const e = elev[x][y], m = moist[x][y];
+        if(e>0.82) world.tiles[x][y]=ROCK;
+        else if(m<0.28 && e>0.45) world.tiles[x][y]=SAND;
+        else if(m>0.58) world.tiles[x][y]= (Math.random()<0.68 ? FOREST : GRASS);
+        else world.tiles[x][y] = GRASS;
+      }
+
+      const t = world.tiles[x][y];
+      if(t===GRASS && Math.random() < 0.05) world.deco[x][y] = ['flower_r','flower_y','flower_b','pebble',null][Math.floor(Math.random()*5)];
+      else if(t===FOREST && Math.random() < TREE_SPAWN_PROB) world.deco[x][y] = ['log','stump',null][Math.floor(Math.random()*3)];
+      else if(t===ROCK && Math.random() < 0.06) world.deco[x][y] = 'pebble';
+    }
+  }
+
+  // props
+  function genProps(){
+    world.props = [];
+    for(let i=0;i<380;i++){
+      const x=Math.floor(Math.random()*MAP_W), y=Math.floor(Math.random()*MAP_H);
+      if(world.tiles[x][y] !== WATER && Math.random() < 0.25) world.props.push({kind:'trash',x,y});
+    }
+    for(let i=0;i<95;i++){
+      const x=Math.floor(Math.random()*MAP_W), y=Math.floor(Math.random()*MAP_H);
+      if(world.tiles[x][y] !== WATER && Math.random() < 0.08) world.props.push({kind:'factory',x,y});
+    }
+    for(let i=0;i<42;i++){
+      let x=Math.floor(Math.random()*MAP_W), y=Math.floor(Math.random()*MAP_H), tries=0;
+      while((world.tiles[x][y]===WATER || world.props.some(p=>p.x===x&&p.y===y)) && tries<160){ x=Math.floor(Math.random()*MAP_W); y=Math.floor(Math.random()*MAP_H); tries++; }
+      if(world.tiles[x][y] !== WATER) world.props.push({kind:'npc',x,y,wander:Math.random()*3});
+    }
+  }
+
+  // place boat
+  function placeBoat(){
+    // place player on land
+    let placed=false;
+    for(let i=0;i<3000;i++){
+      const gx=Math.floor(Math.random()*MAP_W), gy=Math.floor(Math.random()*MAP_H);
+      if(world.tiles[gx][gy] !== WATER){ player.x=gx*TILE + TILE/2; player.y=gy*TILE + TILE/2; placed=true; break; }
+    }
+    if(!placed){ player.x=10*TILE; player.y=10*TILE; }
+    // find nearest shore for boat
+    const [pgx,pgy] = toTile(player.x, player.y);
+    let best=null, bestd=1e12;
+    for(let r=1;r<80;r++){
+      for(let dx=-r; dx<=r; dx++){
+        for(let dy=-r; dy<=r; dy++){
+          if(Math.abs(dx)!==r && Math.abs(dy)!==r) continue;
+          const x=clamp(pgx+dx,0,MAP_W-1), y=clamp(pgy+dy,0,MAP_H-1);
+          if(world.tiles[x][y]===WATER){
+            const nearLand = neighbors4(x,y).some(([nx,ny])=> world.tiles[nx][ny] !== WATER);
+            if(nearLand){ const d=(x-pgx)**2 + (y-pgy)**2; if(d<bestd){ bestd=d; best=[x,y]; } }
+          }
+        }
+      }
+      if(best) break;
+    }
+    if(!best){ for(let x=0;x<MAP_W && !best;x++) for(let y=0;y<MAP_H && !best;y++) if(world.tiles[x][y]===WATER) best=[x,y]; }
+    if(!best) best=[5,5];
+    boat.pixelX = best[0]*TILE + TILE/2; boat.pixelY = best[1]*TILE + TILE/2;
+  }
+
+  // helpers
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function toTile(px,py){ return [clamp(Math.floor(px/TILE),0,MAP_W-1), clamp(Math.floor(py/TILE),0,MAP_H-1)]; }
+  function neighbors4(x,y){ return [[x+1,y],[x-1,y],[x,y+1],[x,y-1]].filter(([nx,ny])=>nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H); }
+  function worldKey(x,y){ return (x<<16)|y; }
+  function hexToRgb(hex){ const v=parseInt(hex.slice(1),16);return{r:(v>>16)&255,g:(v>>8)&255,b:v&255}; }
+
+  // ---------- rendering assets procedural ----------
+  const tileCache = {};
+  function genTile(colors){
+    const c=document.createElement('canvas'); c.width=c.height=TILE; const cx=c.getContext('2d');
+    const id = cx.createImageData(TILE,TILE);
+    for(let y=0;y<TILE;y++) for(let x=0;x<TILE;x++){
+      const col = colors[Math.floor(Math.random()*colors.length)];
+      const rgb = hexToRgb(col); const i=(y*TILE+x)*4; id.data[i]=rgb.r; id.data[i+1]=rgb.g; id.data[i+2]=rgb.b; id.data[i+3]=255;
+    }
+    cx.putImageData(id,0,0); return c;
+  }
+  tileCache[GRASS] = genTile([PAL.g0, PAL.g1]);
+  tileCache[FOREST] = genTile(['#2f5f3a','#2a7046']);
+  tileCache[SAND] = genTile([PAL.sand]);
+  tileCache[ROCK] = genTile([PAL.rock]);
+
+  // canopy
+  const canopy = document.createElement('canvas'); canopy.width=canopy.height=TILE;
+  (function(){
+    const c=canopy.getContext('2d'); c.clearRect(0,0,TILE,TILE);
+    c.fillStyle = PAL.g1; c.beginPath(); c.arc(TILE/2, TILE/2-1, TILE/2-4, 0, Math.PI*2); c.fill();
+    c.fillStyle = PAL.g0; c.beginPath(); c.arc(TILE/2-2, TILE/2+1, TILE/2-6, 0, Math.PI*2); c.fill();
+    c.fillStyle = '#5c3e24'; c.fillRect(TILE/2-2, TILE-8, 4, 6);
+  })();
+
+  // water frames (animated flow)
+  const waterFrames=[], waterPollFrames=[];
+  (function genWater(){
+    for(let f=0; f<6; f++){ waterFrames.push(makeWaterFrame(f,false)); waterPollFrames.push(makeWaterFrame(f,true)); }
+  })();
+  function makeWaterFrame(frame,poll=false){
+    const c=document.createElement('canvas'); c.width=c.height=TILE; const cx=c.getContext('2d');
+    const b0 = hexToRgb(poll?PAL.poll:PAL.water0), b1 = hexToRgb(poll?PAL.poll:PAL.water1);
+    const img = cx.createImageData(TILE,TILE);
+    for(let y=0;y<TILE;y++) for(let x=0;x<TILE;x++){
+      const mix = 0.5 + 0.5*Math.sin((x + frame*3)/6)*Math.cos((y - frame*2)/6);
+      const r=(b0.r*(1-mix)+b1.r*mix)|0, g2=(b0.g*(1-mix)+b1.g*mix)|0, bl=(b0.b*(1-mix)+b1.b*mix)|0;
+      const i=(y*TILE + x)*4; img.data[i]=r; img.data[i+1]=g2; img.data[i+2]=bl; img.data[i+3]=255;
+    }
+    cx.putImageData(img,0,0);
+    cx.strokeStyle = poll ? 'rgba(60,40,28,0.6)' : PAL.foam; cx.lineWidth=1;
+    for(let x=0;x<TILE;x+=5){ const y=(x + frame*2) % TILE; cx.beginPath(); cx.moveTo(x+0.5,y+0.5); cx.lineTo(x+0.5,(y+1)%TILE+0.5); cx.stroke(); }
+    return c;
+  }
+
+  // ---------- input ----------
+  const keys = new Set();
+  window.addEventListener('keydown', e => { keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==='m') toggleMute(); });
+  window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+
+  // ---------- audio (synth) ----------
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  let masterGain = audioCtx.createGain(); masterGain.gain.value = 0.12; masterGain.connect(audioCtx.destination);
+  let musicGain = audioCtx.createGain(); musicGain.gain.value = 0.7; musicGain.connect(masterGain);
+  let sfxGain = audioCtx.createGain(); sfxGain.gain.value = 1.0; sfxGain.connect(masterGain);
+  let muted=false, musicElems=null;
+
+  function startBackgroundMusic(){
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    const pad = audioCtx.createOscillator(), padG = audioCtx.createGain();
+    pad.type='sawtooth'; pad.frequency.value=85; padG.gain.value=0.0015;
+    pad.connect(padG); padG.connect(musicGain);
+    const filter = audioCtx.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value=720;
+    padG.disconnect(); padG.connect(filter); filter.connect(musicGain);
+    pad.start();
+
+    const arp = audioCtx.createOscillator(), arpG=audioCtx.createGain();
+    arp.type='sine'; arp.connect(arpG); arpG.connect(musicGain); arpG.gain.value=0;
+    arp.start();
+    const notes=[220,277.18,329.63,391.99,440];
+    let idx=0;
+    const intv = setInterval(()=>{
+      if(muted) return;
+      const now = audioCtx.currentTime;
+      const f = notes[idx%notes.length];
+      arp.frequency.setValueAtTime(f, now);
+      arpG.gain.cancelScheduledValues(now);
+      arpG.gain.setValueAtTime(0, now);
+      arpG.gain.linearRampToValueAtTime(0.02, now+0.01);
+      arpG.gain.linearRampToValueAtTime(0.0, now+0.35);
+      idx++;
+    },450);
+
+    const bass = audioCtx.createOscillator(), bassG = audioCtx.createGain();
+    bass.type='sine'; bass.frequency.value=55; bassG.gain.value=0.0016; bass.connect(bassG); bassG.connect(musicGain); bass.start();
+
+    musicElems = { pad, arp, bass, intv, filter };
+  }
+
+  function playSfx(type){
+    if(muted) return;
+    const now = audioCtx.currentTime;
+    if(type==='board'){ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='triangle'; o.frequency.value=450; o.connect(g); g.connect(sfxGain); g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(0.02, now+0.02); g.gain.exponentialRampToValueAtTime(0.0001, now+0.25); o.start(); o.stop(now+0.28); }
+    if(type==='disembark'){ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=620; o.connect(g); g.connect(sfxGain); g.gain.linearRampToValueAtTime(0.018, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+0.18); o.start(); o.stop(now+0.2); }
+    if(type==='purify'){ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(sfxGain); g.gain.linearRampToValueAtTime(0.02, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+0.6); o.start(); o.stop(now+0.65); }
+    if(type==='plant'){ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='square'; o.frequency.value=520; o.connect(g); g.connect(sfxGain); g.gain.linearRampToValueAtTime(0.015, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+0.25); o.start(); o.stop(now+0.3); }
+    if(type==='questOk'){ const o1=audioCtx.createOscillator(),g1=audioCtx.createGain(); o1.type='sine'; o1.frequency.value=880; o1.connect(g1); g1.connect(sfxGain); g1.gain.linearRampToValueAtTime(0.02, now+0.01); g1.gain.exponentialRampToValueAtTime(0.0001, now+0.35); o1.start(); o1.stop(now+0.5); setTimeout(()=>{ const o2=audioCtx.createOscillator(),g2=audioCtx.createGain(); o2.type='sine'; o2.frequency.value=1100; o2.connect(g2); g2.connect(sfxGain); g2.gain.linearRampToValueAtTime(0.016, audioCtx.currentTime+0.01); g2.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.35); o2.start(); o2.stop(audioCtx.currentTime+0.45); }, 90); }
+    if(type==='questFail'){ const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type='sawtooth'; o.frequency.value=240; o.connect(g); g.connect(sfxGain); g.gain.linearRampToValueAtTime(0.02, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+0.6); o.start(); o.stop(now+0.6); }
+    if(type==='engine'){ const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type='triangle'; o.frequency.value=120; o.connect(g); g.connect(sfxGain); g.gain.setValueAtTime(0.0002, now); o.start(); g.gain.exponentialRampToValueAtTime(0.0001, now+0.12); o.stop(now+0.14); }
+    if(type==='dash'){ const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type='square'; o.frequency.value=560; o.connect(g); g.connect(sfxGain); g.gain.linearRampToValueAtTime(0.025, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+0.35); o.start(); o.stop(now+0.36); }
+  }
+
+  function toggleMute(){ muted=!muted; masterGain.gain.value = muted?0:0.12; btnMute.textContent = muted ? 'Unmute M' : 'Mute M'; }
+  btnMute.addEventListener('click', toggleMute);
+
+  // ---------- quest system ----------
+  function startQuestFromNPC(npc){
+    if(questActive) return;
+    const types=['purify','plant'].filter(t=>t!==lastQuestType);
+    const type = types[Math.floor(Math.random()*types.length)];
+    questType = type; questGoal = type==='purify' ? 8 + Math.floor(Math.random()*8) : 4 + Math.floor(Math.random()*5);
+    questProgress = 0; questActive=true; questTimer = QUEST_DURATION; questNPC = npc;
+    playSfx('questOk'); toast(`Quest started: ${type==='purify'?'Purify Water':'Plant Trees'} (${questProgress}/${questGoal})`);
+    updateHUD();
+  }
+
+  function incrementQuestProgress(n){
+    if(!questActive) return;
+    questProgress += n; if(questProgress<0) questProgress=0;
+    toast(`${questType==='purify'?'Purify':'Plant'} progress: ${questProgress}/${questGoal}`);
+    if(questProgress >= questGoal) completeQuest();
+    updateHUD();
+  }
+
+  function completeQuest(){
+    const scale = questGoal || 0;
+    if(questType==='purify'){
+      const airG=Math.round(scale*0.6), waterG=Math.round(scale*0.9), parts=Math.max(1,Math.round(scale/4));
+      air = clamp(air+airG,0,100); waterStat = clamp(waterStat+waterG,0,100); boat.parts += parts;
+      playSfx('questOk'); toast(`Quest complete! +Air ${airG}, +Water ${waterG}, +Parts ${parts}`);
+    } else {
+      const airG=Math.round(scale*0.7), bioG=Math.round(scale*0.6), parts=Math.max(1,Math.round(scale/4));
+      air = clamp(air+airG,0,100); bio = clamp(bio+bioG,0,100); boat.parts += parts;
+      playSfx('questOk'); toast(`Quest complete! +Air ${airG}, +Biodiv ${bioG}, +Parts ${parts}`);
+    }
+    lastQuestType = questType;
+    questActive=false; questType=null; questGoal=0; questProgress=0; questTimer=0; questNPC=null;
+    updateHUD();
+  }
+
+  function failQuest(){
+    playSfx('questFail'); toast('Quest failed.');
+    lastQuestType = questType;
+    questActive=false; questType=null; questGoal=0; questProgress=0; questTimer=0; questNPC=null;
+    updateHUD();
+  }
+
+  // ---------- actions ----------
+  let lastAction=0, actionCooldown=600;
+  function canAct(){ return performance.now() - lastAction >= actionCooldown; }
+
+  function plantTree(){
+    if(!canAct()) return;
+    const [gx,gy] = toTile(player.x, player.y);
+    if(world.tiles[gx][gy] === WATER){ toast('Cannot plant in water'); return; }
+    if(world.props.some(p=>p.x===gx && p.y===gy && (p.kind==='tree' || p.kind==='factory' || p.kind==='npc'))){ toast('Spot occupied'); return; }
+    world.props.push({kind:'tree',x:gx,y:gy});
+    lastAction = performance.now(); air = clamp(air+3.5,0,100); bio = clamp(bio+2.5,0,100); energy = Math.max(0, energy-8);
+    if(questActive && questType==='plant') incrementQuestProgress(1);
+    playSfx('plant');
+  }
+
+  function cleanTrash(){
+    if(!canAct()) return;
+    const px=player.x, py=player.y; let best=null, bestd=(TILE*1.6)**2;
+    for(let i=0;i<world.props.length;i++){ const p=world.props[i]; if(p.kind!=='trash') continue; const cx=p.x*TILE+TILE/2, cy=p.y*TILE+TILE/2; const d=(cx-px)**2 + (cy-py)**2; if(d<=bestd){ best=i; bestd=d; } }
+    if(best !== null){ world.props.splice(best,1); air=clamp(air+1.5,0,100); waterStat=clamp(waterStat+1,0,100); bio=clamp(bio+1,0,100); energy=clamp(energy+6,0,100); lastAction=performance.now(); playSfx('plant'); toast('Trash cleaned'); }
+    else toast('No trash nearby');
+  }
+
+  function purifyWaterAction(){
+    if(!canAct()) return;
+    const [gx,gy] = toTile(player.x, player.y);
+    if(world.tiles[gx][gy] !== WATER){ toast('Stand on water (boat) to purify'); return; }
+    let removed=0;
+    for(let i=world.props.length-1;i>=0;i--) if(world.props[i].kind==='pollution' && Math.abs(world.props[i].x-gx)<=2 && Math.abs(world.props[i].y-gy)<=2){ world.props.splice(i,1); removed++; }
+    function rm(x,y){ const k=worldKey(x,y); if(pollutedTiles.has(k)){ pollutedTiles.delete(k); removed++; } }
+    rm(gx,gy); for(let dx=-2;dx<=2;dx++) for(let dy=-2;dy<=2;dy++) rm(gx+dx,gy+dy);
+    if(removed>0){ waterStat = clamp(waterStat + 4 + removed*1.2,0,100); air = clamp(air+0.5,0,100); lastAction = performance.now(); playSfx('purify'); toast('Purified water'); }
+    else toast('Nothing to purify here');
+    if(questActive && questType==='purify') incrementQuestProgress(Math.max(1,removed));
+    if(pollutionActive && pollutedTiles.size===0){
+      pollutionActive=false; pollutionSource=null;
+      const delay = POLL_RESPAWN_MIN + Math.random()*POLL_RESPAWN_VAR;
+      nextPollutionAt = performance.now() + delay;
+      toast(`Pollution cleaned — next source in ${(delay/1000).toFixed(1)}s`);
+      pendingWildfire=true; wildfireDelayUntil = performance.now() + 6000 + Math.random()*6000;
+    }
+  }
+
+  function extinguishFire(){
+    if(!canAct()) return;
+    const px=player.x, py=player.y; let best=null, bestd=(TILE*1.8)**2;
+    for(let i=0;i<fires.length;i++){ const f=fires[i]; const fx=f.x*TILE+TILE/2, fy=f.y*TILE+TILE/2; const d=(fx-px)**2 + (fy-py)**2; if(d<=bestd){ best=i; bestd=d; } }
+    if(best!==null){ const ff=fires.splice(best,1)[0]; world.tiles[ff.x][ff.y]=GRASS; world.deco[ff.x][ff.y]=null; bio=clamp(bio+12,0,100); lastAction=performance.now(); playSfx('purify'); toast('Fire extinguished'); if(fires.length===0) wildfireActive=false; }
+    else toast('No fire nearby');
+  }
+
+  // ---------- boat mechanics ----------
+  function canBoardFromPlayer(){
+    const [pgx,pgy]=toTile(player.x,player.y); if(world.tiles[pgx][pgy]===WATER) return false;
+    const bx=Math.floor(boat.pixelX/TILE), by=Math.floor(boat.pixelY/TILE);
+    for(let dx=-BOAT_BOARD_RADIUS; dx<=BOAT_BOARD_RADIUS; dx++) for(let dy=-BOAT_BOARD_RADIUS; dy<=BOAT_BOARD_RADIUS; dy++){
+      if(Math.abs(dx)+Math.abs(dy) > BOAT_BOARD_RADIUS) continue; const nx=pgx+dx, ny=pgy+dy; if(nx===bx && ny===by) return true;
+    }
+    return false;
+  }
+
+  function tryBoardOrDisembark(){
+    if(boat.inBoat){
+      const bx=Math.floor(boat.pixelX/TILE), by=Math.floor(boat.pixelY/TILE);
+      const shore = neighbors4(bx,by).find(([nx,ny])=> world.tiles[nx][ny] !== WATER);
+      if(!shore){ toast('Boat must be adjacent to shore to disembark'); return; }
+      const [lx,ly]=shore; player.x = lx*TILE + TILE/2; player.y = ly*TILE + TILE/2; boat.inBoat=false; playSfx('disembark'); toast('Disembarked — boat left at current spot'); return;
+    }
+    if(!canBoardFromPlayer()){ toast('Get closer to your boat (shoreline) to board'); return; }
+    player.x = boat.pixelX; player.y = boat.pixelY; boat.vx=0; boat.vy=0; boat.inBoat=true; playSfx('board'); toast('Boarded boat');
+  }
+
+  function tryUpgradeBoat(){
+    const nextLvl = Math.min(4, boat.level + 1);
+    if(nextLvl === boat.level){ toast('Boat is max level'); return; }
+    const cost = UPGRADE_COSTS[nextLvl];
+    if(boat.parts < cost){ toast(`Need ${cost} parts to upgrade to Lv${nextLvl}`); return; }
+    const [pgx,pgy] = toTile(player.x,player.y); const bx=Math.floor(boat.pixelX/TILE), by=Math.floor(boat.pixelY/TILE);
+    if(Math.abs(pgx-bx) > BOAT_BOARD_RADIUS || Math.abs(pgy-by) > BOAT_BOARD_RADIUS){ toast('Stand next to the boat to upgrade'); return; }
+    boat.parts -= cost; boat.level = nextLvl; boatLvlEl.textContent = `BoatLv ${boat.level}`; boatPartsEl.textContent = `Parts ${boat.parts}`; playSfx('questOk'); toast(`Boat upgraded to Lv${boat.level}`);
+  }
+
+  // ---------- pollution & wildfire ----------
+  function spawnPollutionSource(){
+    const candidates=[];
+    for(const k of world.waterSet){
+      const x=(k>>16)&0xffff, y=k&0xffff;
+      const neighborWater = neighbors4(x,y).filter(([nx,ny])=> world.tiles[nx][ny]===WATER).length;
+      if(neighborWater >= 2) candidates.push([x,y]);
+    }
+    if(candidates.length===0) return;
+    const spot = candidates[Math.floor(Math.random()*candidates.length)];
+    pollutionSource = {x:spot[0], y:spot[1]};
+    pollutedTiles.clear();
+    for(let dx=-1; dx<=1; dx++) for(let dy=-1; dy<=1; dy++){
+      const nx=spot[0]+dx, ny=spot[1]+dy;
+      if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H && world.tiles[nx][ny]===WATER && Math.random()<0.8) pollutedTiles.add(worldKey(nx,ny));
+    }
+    pollutionActive=true; for(const k of pollutedTiles){ const x=(k>>16)&0xffff, y=k&0xffff; world.props.push({kind:'pollution',x,y}); }
+    playSfx('engine'); toast('A river pollution source appeared');
+  }
+
+  function spreadPollutionTick(){
+    if(!pollutionActive) return;
+    const spreadChance = questActive ? 0.05 : 0.09; // very slow
+    const list = [...pollutedTiles].map(k=>[(k>>16)&0xffff, k&0xffff]);
+    const toAdd = [];
+    for(const [x,y] of list){
+      for(const [nx,ny] of neighbors4(x,y)){
+        if(world.tiles[nx][ny] !== WATER) continue;
+        const k = worldKey(nx,ny);
+        if(!pollutedTiles.has(k) && Math.random() < spreadChance) toAdd.push(k);
+      }
+    }
+    // factories rarely add pollution
+    for(const p of world.props){ if(p.kind==='factory' && Math.random() < (questActive?0.0006:0.002)){ for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=p.x+dx, ny=p.y+dy; if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H && world.tiles[nx][ny]===WATER) toAdd.push(worldKey(nx,ny)); } } }
+    for(const k of toAdd) pollutedTiles.add(k);
+    // sync props
+    world.props = world.props.filter(p=> !(p.kind==='pollution' && !pollutedTiles.has(worldKey(p.x,p.y))) );
+    for(const k of pollutedTiles){ const x=(k>>16)&0xffff, y=k&0xffff; if(!world.props.some(p=>p.kind==='pollution' && p.x===x && p.y===y)) world.props.push({kind:'pollution',x,y}); }
+  }
+
+  function maybeIgniteWildfire(){
+    if(!pendingWildfire) return; if(performance.now() < wildfireDelayUntil) return; if(questActive && questType==='plant') return;
+    const forests=[]; for(let x=0;x<MAP_W;x++) for(let y=0;y<MAP_H;y++) if(world.tiles[x][y]===FOREST) forests.push([x,y]);
+    if(forests.length===0){ pendingWildfire=false; return; }
+    const pick = forests[Math.floor(Math.random()*forests.length)];
+    fires = [{kind:'fire', x:pick[0], y:pick[1]}]; wildfireActive=true; pendingWildfire=false; toast('Wildfire started!'); playSfx('purify');
+  }
+
+  function spreadFireTick(){
+    if(!wildfireActive) return; if(questActive && questType==='plant') return;
+    const chance = questActive ? 0.07 : 0.18;
+    const newF=[];
+    for(const f of fires){
+      for(const [nx,ny] of neighbors4(f.x,f.y)){
+        if(world.tiles[nx][ny]===FOREST){
+          if(!fires.some(ff=>ff.x===nx&&ff.y===ny) && !newF.some(ff=>ff.x===nx&&ff.y===ny) && Math.random()<chance){
+            newF.push({kind:'fire', x:nx, y:ny}); bio = clamp(bio-1.5,0,100); world.deco[nx][ny]='burnt_ground';
+          }
+        }
+      }
+    }
+    fires.push(...newF);
+  }
+
+  // ---------- rendering ----------
+  let waterIdx=0;
+  function render(){
+    g.clearRect(0,0,W,H);
+    const sx = clamp(Math.floor(camera[0]/TILE)-1,0,MAP_W-1), sy = clamp(Math.floor(camera[1]/TILE)-1,0,MAP_H-1);
+    const ex = clamp(sx + Math.ceil(W/TILE)+3, 0, MAP_W), ey = clamp(sy + Math.ceil(H/TILE)+3, 0, MAP_H);
+
+    for(let x=sx;x<ex;x++){
+      for(let y=sy;y<ey;y++){
+        const wx = x*TILE - camera[0], wy = y*TILE - camera[1];
+        const t = world.tiles[x][y];
+        if(t===WATER){ const k = worldKey(x,y); const img = pollutedTiles.has(k)? waterPollFrames[waterIdx] : waterFrames[waterIdx]; g.drawImage(img, wx, wy); }
+        else g.drawImage(tileCache[t] || tileCache[GRASS], wx, wy);
+        // bank shading
+        if(t!==WATER){
+          let nb=0; if(x+1<MAP_W && world.tiles[x+1][y]===WATER) nb++; if(x-1>=0 && world.tiles[x-1][y]===WATER) nb++; if(y+1<MAP_H && world.tiles[x][y+1]===WATER) nb++; if(y-1>=0 && world.tiles[x][y-1]===WATER) nb++;
+          if(nb) { g.fillStyle='rgba(0,0,0,0.06)'; g.fillRect(wx,wy,TILE,TILE); }
+        }
+        const d = world.deco[x][y]; if(d) drawDeco(d, wx, wy);
+      }
+    }
+
+    // props
+    for(const p of world.props){
+      if(p.x < sx || p.x >= ex || p.y < sy || p.y >= ey) continue;
+      const wx = p.x*TILE - camera[0], wy = p.y*TILE - camera[1];
+      if(p.kind==='trash'){ g.fillStyle='#ddd'; g.beginPath(); g.arc(wx+TILE/2, wy+TILE/2, 5,0,Math.PI*2); g.fill(); }
+      else if(p.kind==='factory'){ g.fillStyle='#78788c'; g.fillRect(wx+6, wy+8, TILE-12, TILE-12); g.fillStyle='#50505a'; g.fillRect(wx+TILE/2-2, wy+2, 4, 6); }
+      else if(p.kind==='npc'){ g.fillStyle=(questActive && questNPC===p)? '#ff99cc' : '#ff66cc'; g.beginPath(); g.arc(wx+TILE/2, wy+TILE/2-6, 6,0,Math.PI*2); g.fill(); g.fillStyle='#222'; g.fillRect(wx+TILE/2-5, wy+TILE/2, 10, 6); }
+      else if(p.kind==='tree'){ g.drawImage(canopy, wx, wy-4); }
+      else if(p.kind==='pollution'){ g.fillStyle=PAL.poll; g.beginPath(); g.arc(wx+TILE/2, wy+TILE/2, 6,0,Math.PI*2); g.fill(); }
+    }
+
+    // fires
+    const tFrame = Math.floor(performance.now()/300)%3;
+    for(const f of fires){ if(f.x < sx || f.x >= ex || f.y < sy || f.y >= ey) continue; const wx=f.x*TILE-camera[0], wy=f.y*TILE-camera[1]; g.fillStyle=['#f0781e','#ffb43c','#ffd878'][tFrame]; g.beginPath(); g.moveTo(wx+TILE/2, wy+6); g.lineTo(wx+TILE/2-8, wy+TILE/2+10); g.lineTo(wx+TILE/2+8, wy+TILE/2+10); g.closePath(); g.fill(); }
+
+    // boat & player
+    drawBoat(); drawPlayer();
+
+    // canopy top layer
+    for(let x=sx;x<ex;x++) for(let y=sy;y<ey;y++) if(world.tiles[x][y]===FOREST){ const wx = x*TILE - camera[0], wy = y*TILE - camera[1]; g.drawImage(canopy, wx, wy-4); }
+
+    // minimap
+    drawMinimap();
+  }
+
+  function drawDeco(name, wx, wy){
+    if(name==='pebble'){ g.fillStyle='#aaa'; g.beginPath(); g.arc(wx+8, wy+10, 1.6, 0, Math.PI*2); g.fill(); }
+    else if(name.startsWith('flower')){ const col = name==='flower_r'?'#d23c46':name==='flower_y'?'#e4cd3c':'#4680d2'; g.fillStyle='#fff'; g.beginPath(); g.arc(wx+8, wy+8, 3,0,Math.PI*2); g.fill(); g.fillStyle=col; g.beginPath(); g.arc(wx+8,wy+8,2,0,Math.PI*2); g.fill(); }
+    else if(name==='log'){ g.fillStyle='#64462c'; g.fillRect(wx+6, wy+TILE-12, TILE-12, 6); g.strokeStyle='#503b28'; for(let px=8; px<TILE-10; px+=6){ g.beginPath(); g.moveTo(wx+px, wy+TILE-12); g.lineTo(wx+px, wy+TILE-6); g.stroke(); } }
+    else if(name==='stump'){ g.fillStyle='#7c5838'; g.beginPath(); g.arc(wx+TILE/2, wy+TILE-8, 5,0,Math.PI*2); g.fill(); }
+    else if(name==='burnt_ground'){ g.fillStyle='#3a2419'; g.fillRect(wx, wy, TILE, TILE); }
+  }
+
+  function drawPlayer(){
+    const px = player.x - camera[0], py = player.y - camera[1];
+    g.fillStyle='rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(px, py+18, 14, 5, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle='#3c3250'; g.fillRect(px-6, py-12, 12, 8); g.fillStyle='#f5dcb9'; g.fillRect(px-6, py-12, 12, 8);
+    g.fillStyle = boat.inBoat ? '#385f8a' : '#3c82c8'; g.fillRect(px-7, py-6, 14, 10);
+    g.fillStyle='#283250'; g.fillRect(px-5, py+4 + ((Math.floor(performance.now()/150)%3)), 4, 8); g.fillRect(px+1, py+4 + ((Math.floor(performance.now()/150)%3)), 4, 8);
+  }
+
+  // modern motorboat draw (procedural, nicer)
+  function drawBoat(){
+    const wx = boat.pixelX - camera[0], wy = boat.pixelY - camera[1];
+    const speed = Math.hypot(boat.vx||0, boat.vy||0);
+    const wakeIntensity = clamp(speed / BOAT_SPEEDS[boat.level] || 0, 0, 1);
+    if(wakeIntensity > 0.02){
+      const dirX = Math.cos(boat.angle), dirY = Math.sin(boat.angle);
+      const wakeCount = 6;
+      for(let i=0;i<wakeCount;i++){
+        const t = i / wakeCount;
+        const ox = wx - dirX*(18 + t*36), oy = wy - dirY*(18 + t*36);
+        const alpha = 0.14 * (1 - t) * wakeIntensity;
+        const sx = 18 + t*14;
+        g.fillStyle = `rgba(240,250,255,${alpha})`;
+        g.beginPath(); g.ellipse(ox, oy + Math.sin(performance.now()/220 + i)*2, sx*(1+t*0.18), sx*0.5*(1+t*0.18), boat.angle + Math.PI/2, 0, Math.PI*2); g.fill();
+      }
+    }
+    // body: modern motorboat silhouette
+    g.save(); g.translate(wx,wy); g.rotate(boat.angle);
+    // shadow
+    g.fillStyle='rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(0,16,20,6,0,0,Math.PI*2); g.fill();
+    // hull
+    g.beginPath(); g.moveTo(-22,10); g.quadraticCurveTo(-10,-12,0,-12); g.quadraticCurveTo(10,-12,22,10); g.quadraticCurveTo(14,14,0,18); g.quadraticCurveTo(-12,16,-22,10); g.closePath();
+    g.fillStyle='#eaf2f8'; g.fill(); g.lineWidth=1.2; g.strokeStyle='#2b2b2b'; g.stroke();
+
+    // cabin
+    g.fillStyle='#2b6a86'; g.beginPath(); g.roundRect(-8,-8,16,8,3); g.fill();
+    // windshield
+    g.fillStyle='rgba(255,255,255,0.18)'; g.beginPath(); g.roundRect(-6,-7,12,5,2); g.fill();
+
+    // seating / interior
+    g.fillStyle='#bcd6df'; g.fillRect(-6,0,12,6);
+    // outboard motor box
+    g.fillStyle='#2f2f35'; g.fillRect(12,8,10,8);
+    // propeller (rotate)
+    g.save(); g.translate(18,13); g.rotate(boat.propAngle); g.fillStyle='#111'; g.fillRect(-1,-6,2,12); g.fillRect(-6,-1,12,2); g.restore();
+    g.restore();
+  }
+
+  // helper to draw rounded rect (polyfill)
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+    if(!r) r=4;
+    this.beginPath(); this.moveTo(x+r,y); this.arcTo(x+w,y,x+w,y+h,r); this.arcTo(x+w,y+h,x,y+h,r); this.arcTo(x,y+h,x,y,r); this.arcTo(x,y,x+w,y,r); this.closePath();
+  };
+
+  // ---------- minimap ----------
+  function drawMinimap(){
+    const img = mg.createImageData(MAP_W, MAP_H);
+    function put(x,y,hex){ const i=(y*MAP_W+x)*4; const c=hexToRgb(hex); img.data[i]=c.r; img.data[i+1]=c.g; img.data[i+2]=c.b; img.data[i+3]=255; }
+    for(let x=0;x<MAP_W;x++) for(let y=0;y<MAP_H;y++){
+      const t = world.tiles[x][y];
+      let col = PAL.g1;
+      if(t===WATER) col = PAL.water1;
+      else if(t===FOREST||t===GRASS) col = PAL.g1;
+      else if(t===SAND) col = PAL.sand;
+      else col = PAL.rock;
+      put(x,y,col);
+    }
+    for(const k of pollutedTiles){ const x=(k>>16)&0xffff, y=k&0xffff; if(x>=0&&x<MAP_W&&y>=0&&y<MAP_H) put(x,y,PAL.poll); }
+    for(const f of fires){ if(f.x>=0&&f.x<MAP_W&&f.y>=0&&f.y<MAP_H) put(f.x,f.y,'#ffb84d'); }
+    for(const p of world.props){ if(p.kind==='trash') put(p.x,p.y,'#eeeeee'); if(p.kind==='npc') put(p.x,p.y,'#ff66cc'); }
+    const bx = Math.floor(boat.pixelX/TILE), by=Math.floor(boat.pixelY/TILE); if(bx>=0&&bx<MAP_W&&by>=0&&by<MAP_H) put(bx,by,PAL.boat);
+    const [pgx,pgy] = toTile(player.x,player.y); if(pgx>=0&&pgx<MAP_W&&pgy>=0&&pgy<MAP_H) put(pgx,pgy,'#ff3366');
+    mg.putImageData(img,0,0);
+    mg.strokeStyle='#ffffff'; mg.lineWidth=1; mg.strokeRect(Math.floor(camera[0]/TILE)+0.5, Math.floor(camera[1]/TILE)+0.5, Math.floor(W/TILE), Math.floor(H/TILE));
+  }
+
+  // ---------- NPCs ----------
+  function updateNPCs(dt){
+    for(const p of world.props){ if(p.kind!=='npc') continue; p.wander = (p.wander || Math.random()*3) - dt; if(p.wander <= 0){ p.wander = 0.6 + Math.random()*3; const steps = 1 + Math.floor(Math.random()*3); let tx=p.x, ty=p.y; for(let s=0;s<steps;s++){ const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; const [dx,dy] = dirs[Math.floor(Math.random()*dirs.length)]; const nx=tx+dx, ny=ty+dy; if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H && world.tiles[nx][ny] !== WATER && !world.props.some(q=>q!==p && q.x===nx && q.y===ny)){ tx=nx; ty=ny; } } p.x=tx; p.y=ty; } }
+  }
+
+  // ---------- eco decay ----------
+  function ecoDecayTick(dt){
+    const trashCount = world.props.filter(p=>p.kind==='trash').length;
+    const factoryCount = world.props.filter(p=>p.kind==='factory').length;
+    const pollCount = pollutedTiles.size;
+    const fireCount = fires.length;
+    const treeCount = world.props.filter(p=>p.kind==='tree').length;
+    let delta = 0; delta += 0.004*factoryCount*dt; delta += 0.002*trashCount*dt; delta += 0.02*pollCount*dt; delta += 0.02*fireCount*dt; delta -= 0.006*treeCount*dt;
+    const stab = questActive ? 0.65 : 1.0;
+    air = clamp(air - delta*0.5*stab, 0,100); waterStat = clamp(waterStat - delta*0.9*stab, 0,100);
+    const targetBio = Math.max(0, 100 - (air + waterStat)/2);
+    bio += (targetBio - bio) * 0.015;
+  }
+
+  // ---------- HUD ----------
+  function updateHUD(){
+    barAir.style.width = air + '%'; barWater.style.width = waterStat + '%'; barBio.style.width = bio + '%';
+    airTxt.textContent = Math.floor(air) + '%'; waterTxt.textContent = Math.floor(waterStat) + '%'; bioTxt.textContent = Math.floor(bio) + '%';
+    energyTxt.textContent = Math.floor(energy); boatLvlEl.textContent = `BoatLv ${boat.level}`; boatPartsEl.textContent = `Parts ${boat.parts}`;
+    if(questActive && questType){ questTxt.textContent = (questType==='purify'?'Purify Water':'Plant Trees') + ` (${questProgress}/${questGoal})`; questTimerEl.textContent = `Time left: ${Math.ceil(questTimer)}s`; } else { questTxt.textContent='None'; questTimerEl.textContent=''; }
+  }
+
+  // ---------- input actions ----------
+  window.addEventListener('keydown', e=>{
+    const k = e.key.toLowerCase();
+    if(k==='m'){ toggleMute(); }
+    if(k==='b'){ tryBoardOrDisembark(); }
+    if(k==='u'){ tryUpgradeBoat(); }
+    if(k==='p'){ plantTree(); }
+    if(k==='e'){ cleanTrash(); }
+    if(k==='r'){ purifyWaterAction(); }
+    if(k==='f'){ extinguishFire(); }
+    if(k==='q'){
+      let best=null, bestd=(TILE*1.6)**2;
+      for(const p of world.props){ if(p.kind!=='npc') continue; const cx=p.x*TILE+TILE/2, cy=p.y*TILE+TILE/2; const d=(cx-player.x)**2 + (cy-player.y)**2; if(d<=bestd){ best=p; bestd=d; } }
+      if(best) startQuestFromNPC(best); else toast('No NPC nearby');
+    }
+    if(k===' '){ if(boat.level>=4 && boat.inBoat){ const now=performance.now(); if(now-boat.lastDashAt >= DASH_COOLDOWN){ boat.lastDashAt = now; const dir = Math.atan2(boat.vy||0, boat.vx||0) || boat.angle; boat.vx += Math.cos(dir) * DASH_SPEED; boat.vy += Math.sin(dir) * DASH_SPEED; playSfx('dash'); toast('Dash!'); } } }
+  });
+
+  // ---------- main loop ----------
+  let lastFrame = performance.now();
+  function startGame(){
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    startBackgroundMusic();
+    nextPollutionAt = performance.now() + 2000 + Math.random()*2500;
+    lastFrame = performance.now();
+    requestAnimationFrame(loop);
+    setInterval(()=>{ if(boat.inBoat && Math.hypot(boat.vx,boat.vy)>10) playSfx('engine'); }, 2400);
+  }
+
+  function loop(ts){
+    const dt = Math.min((ts - lastFrame) / 1000, 0.05);
+    lastFrame = ts;
+
+    // input movement
+    let dx=0, dy=0;
+    if(keys.has('a')||keys.has('arrowleft')) dx -= 1;
+    if(keys.has('d')||keys.has('arrowright')) dx += 1;
+    if(keys.has('w')||keys.has('arrowup')) dy -= 1;
+    if(keys.has('s')||keys.has('arrowdown')) dy += 1;
+
+    // movement & boat
+    if(boat.inBoat){
+      let inputMag = Math.hypot(dx,dy);
+      if(inputMag < 1e-4){ boat.vx *= 0.95; boat.vy *= 0.95; }
+      else {
+        const L = Math.hypot(dx,dy) || 1; const desiredAngle = Math.atan2(dy/L, dx/L);
+        const targetSpeed = BOAT_SPEEDS[boat.level];
+        const desiredVx = Math.cos(desiredAngle) * targetSpeed * (inputMag>1?1:inputMag);
+        const desiredVy = Math.sin(desiredAngle) * targetSpeed * (inputMag>1?1:inputMag);
+        const ax = Math.sign(desiredVx - boat.vx) * BOAT_ACCEL * dt;
+        const ay = Math.sign(desiredVy - boat.vy) * BOAT_ACCEL * dt;
+        boat.vx += ax; boat.vy += ay;
+        if(Math.hypot(boat.vx,boat.vy) > 8){
+          const targetA = Math.atan2(boat.vy, boat.vx);
+          let delta = targetA - boat.angle; while(delta > Math.PI) delta -= 2*Math.PI; while(delta < -Math.PI) delta += 2*Math.PI;
+          boat.angle += clamp(delta, -BOAT_TURN*dt, BOAT_TURN*dt);
+        }
+      }
+      const sp = Math.hypot(boat.vx,boat.vy);
+      const maxS = BOAT_SPEEDS[boat.level]*1.05;
+      if(sp > maxS){ const scale = maxS/sp; boat.vx *= scale; boat.vy *= scale; }
+      const nx = boat.pixelX + boat.vx*dt, ny = boat.pixelY + boat.vy*dt;
+      const [tgx,tgy] = toTile(nx,ny);
+      if(world.tiles[tgx][tgy] !== WATER){ boat.vx = 0; boat.vy = 0; } else { boat.pixelX = nx; boat.pixelY = ny; player.x = boat.pixelX; player.y = boat.pixelY; }
+      boat.propAngle += 0.06 * (1 + Math.hypot(boat.vx,boat.vy)/BOAT_SPEEDS[boat.level]*6);
+    } else {
+      if(Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4){
+        const L = Math.hypot(dx,dy) || 1;
+        const nx = clamp(player.x + dx/L * PLAYER_SPEED * dt, 0, MAP_W*TILE - 1);
+        const ny = clamp(player.y + dy/L * PLAYER_SPEED * dt, 0, MAP_H*TILE - 1);
+        const [tgx,tgy] = toTile(nx,ny);
+        if(world.tiles[tgx][tgy] !== WATER){ player.x = nx; player.y = ny; }
+      }
+    }
+
+    camera[0] = clamp(player.x - W/2, 0, MAP_W*TILE - W);
+    camera[1] = clamp(player.y - H/2, 0, MAP_H*TILE - H);
+
+    // periodic updates
+    waterIdx = (waterIdx + 1) % waterFrames.length;
+    updateNPCs(dt);
+    if(!pollutionActive && performance.now() >= nextPollutionAt) spawnPollutionSource();
+    if(pollutionActive && performance.now() - lastPollTick >= POLL_TICK){ lastPollTick = performance.now(); spreadPollutionTick(); }
+    maybeIgniteWildfire();
+    if(wildfireActive && performance.now() - lastFireTick >= FIRE_TICK){ lastFireTick = performance.now(); spreadFireTick(); }
+    if(Math.random() < 0.0018) { const x=Math.floor(Math.random()*MAP_W), y=Math.floor(Math.random()*MAP_H); if(world.tiles[x][y]!==WATER) world.props.push({kind:'trash',x,y}); }
+    ecoDecayTick(dt);
+    if(questActive){ questTimer -= dt; if(questTimer <= 0) failQuest(); }
+    updateHUD();
+    render();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- misc housekeeping ----------
+  setInterval(()=>{ world.props = world.props.filter(p => !(p.kind==='pollution' && !pollutedTiles.has(worldKey(p.x,p.y))) ); }, 7000);
+
+  window.__EG = { world, boat, player, pollutedTiles, fires };
+
+  // resume audio when user interacts
+  window.addEventListener('click', ()=>{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }, { once:true });
+  window.addEventListener('keydown', ()=>{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }, { once:true });
+
+  // End closure
+})();
+</script>
+</body>
+</html>
